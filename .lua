@@ -12,8 +12,8 @@ local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlaye
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	WinPos        = Vector3.new(-6809.3223, 531.2539, 1468.8073),
-	WinSpeed      = 300,
-	WinHeight     = 900,
+	AutoWinSpeed  = 45,  -- Safe default speed
+	AutoWinHeight = 250, -- Safe default height
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -370,6 +370,35 @@ local function makeButton(labelText, color, callback)
 	end)
 end
 
+-- // TWEEN HELPER FUNCTION // --
+local function performSmoothTween(root, targetPos)
+	if not Cfg.AutoWin then return false end
+	local distance = (root.Position - targetPos).Magnitude
+	local duration = distance / Cfg.AutoWinSpeed
+	
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+	local tween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
+	
+	tween:Play()
+	
+	-- We wait for completion but keep checking if user turned it off so we can cancel it mid-air
+	local completed = false
+	local conn
+	conn = tween.Completed:Connect(function() completed = true end)
+	
+	while not completed and Cfg.AutoWin and root.Parent do
+		task.wait(0.1)
+	end
+	
+	if conn then conn:Disconnect() end
+	if not Cfg.AutoWin or not root.Parent then
+		tween:Cancel()
+		return false
+	end
+	
+	return true
+end
+
 -- // BUILDING TABS & FEATURES // --
 
 -- AUTO FARM
@@ -402,47 +431,28 @@ makeToggle("Auto Win (Smooth)", Color3.fromRGB(210, 140, 65), function(v)
 				if root and Cfg.WinPos then
 					local dist = (root.Position - Cfg.WinPos).Magnitude
 					if dist > 5 then
+						-- 1. Setup states
 						if not Cfg.Fly then Cfg.Fly = true StartFly() end
 						local oldNoclip = Cfg.Noclip
 						Cfg.Noclip = true
 
-						notify("Auto Win", "Rising up...", 2)
-						local riseStart = root.CFrame
-						local riseEnd = riseStart * CFrame.new(0, Cfg.WinHeight, 0)
-						for i = 0, 1, 0.05 do
-							if not Cfg.AutoWin or not root.Parent then break end
-							root.CFrame = riseStart:Lerp(riseEnd, i)
-							task.wait(0.02)
-						end
-
-						if not Cfg.AutoWin or not root.Parent then Cfg.Noclip = oldNoclip return end
+						-- 2. Phase 1: Rise safely
+						notify("Auto Win", "Rising up safely...", 2)
+						local risePos = root.Position + Vector3.new(0, Cfg.AutoWinHeight, 0)
+						if not performSmoothTween(root, risePos) then Cfg.Noclip = oldNoclip return end
 						task.wait(0.2)
 
-						notify("Auto Win", "Traveling...", 2)
-						local startCF = root.CFrame
-						local targetPos = Vector3.new(Cfg.WinPos.X, root.Position.Y, Cfg.WinPos.Z)
-						local targetCF = CFrame.new(targetPos, Vector3.new(targetPos.X, targetPos.Y, targetPos.Z + 1))
-						local steps = math.floor((root.Position - targetPos).Magnitude / (Cfg.WinSpeed / 30))
-
-						for i = 1, steps do
-							if not Cfg.AutoWin or not root.Parent then break end
-							root.CFrame = startCF:Lerp(targetCF, i/steps)
-							task.wait(0.03)
-						end
-
-						if not Cfg.AutoWin or not root.Parent then Cfg.Noclip = oldNoclip return end
+						-- 3. Phase 2: Travel horizontally
+						notify("Auto Win", "Traveling to destination...", 2)
+						local targetPos = Vector3.new(Cfg.WinPos.X, risePos.Y, Cfg.WinPos.Z)
+						if not performSmoothTween(root, targetPos) then Cfg.Noclip = oldNoclip return end
 						task.wait(0.2)
 
-						notify("Auto Win", "Descending...", 2)
-						local currentCF = root.CFrame
-						local finalCF = CFrame.new(Cfg.WinPos)
-						for i = 0, 1, 0.01 do
-							if not Cfg.AutoWin or not root.Parent then break end
-							root.CFrame = currentCF:Lerp(finalCF, i)
-							task.wait(0.01)
-						end
-						if root.Parent then root.CFrame = finalCF end
+						-- 4. Phase 3: Descend safely
+						notify("Auto Win", "Descending safely...", 2)
+						if not performSmoothTween(root, Cfg.WinPos) then Cfg.Noclip = oldNoclip return end
 
+						-- 5. Complete
 						Cfg.Noclip = oldNoclip
 						StopFly() 
 
@@ -461,6 +471,9 @@ makeToggle("Auto Win (Smooth)", Color3.fromRGB(210, 140, 65), function(v)
 		end)
 	end
 end)
+
+makeSlider("Auto Win Speed", 10, 200, 45, function(v) Cfg.AutoWinSpeed = v end)
+makeSlider("Auto Win Height", 50, 1000, 250, function(v) Cfg.AutoWinHeight = v end)
 
 makeDivider()
 
@@ -571,4 +584,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Escape Hub", "Loaded Successfully without Key!", 5)
+notify("Escape Hub", "Loaded Successfully!", 5)
