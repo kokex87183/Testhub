@@ -12,10 +12,8 @@ local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlaye
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	WinPos        = Vector3.new(-6809.3223, 531.2539, 1468.8073),
-	AutoWinSpeed  = 50,
-	AutoWinHeight = 250,
-	AutoWinPath   = "Straight",        -- "Straight" or "Rise in Air"
-	AutoWinMode   = "Anchored Tween",  -- "Anchored Tween", "Step Teleport", "Instant TP"
+	AutoWinSpeed  = 50,  -- Used for Micro-Steps
+	AutoWinMode   = "Legit Walk",  -- "Legit Walk", "Micro-Steps (CFrame)", "Instant TP"
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -110,16 +108,13 @@ ScreenGui.Parent = guiParent
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 420)
-MainFrame.Position = UDim2.new(0, 40, 0.5, -210)
+MainFrame.Size = UDim2.new(0, 260, 0, 400)
+MainFrame.Position = UDim2.new(0, 40, 0.5, -200)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
-MainCorner.Parent = MainFrame
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 
 local MainStroke = Instance.new("UIStroke")
 MainStroke.Color = Color3.fromRGB(45, 45, 55)
@@ -131,10 +126,7 @@ TitleBar.Size = UDim2.new(1, 0, 0, 36)
 TitleBar.BackgroundColor3 = Color3.fromRGB(26, 26, 32)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
-
-local TitleBarCorner = Instance.new("UICorner")
-TitleBarCorner.CornerRadius = UDim.new(0, 8)
-TitleBarCorner.Parent = TitleBar
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 8)
 
 local TitlePatch = Instance.new("Frame")
 TitlePatch.Size = UDim2.new(1, 0, 0.5, 0)
@@ -142,6 +134,13 @@ TitlePatch.Position = UDim2.new(0, 0, 0.5, 0)
 TitlePatch.BackgroundColor3 = Color3.fromRGB(26, 26, 32)
 TitlePatch.BorderSizePixel = 0
 TitlePatch.Parent = TitleBar
+
+local TitleBarStroke = Instance.new("Frame")
+TitleBarStroke.Size = UDim2.new(1, 0, 0, 1)
+TitleBarStroke.Position = UDim2.new(0, 0, 1, 0)
+TitleBarStroke.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+TitleBarStroke.BorderSizePixel = 0
+TitleBarStroke.Parent = TitleBar
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -50, 1, 0)
@@ -232,12 +231,12 @@ local function makeDropRow(labelText, options, callback)
 	lbl.Parent = row
 
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 120, 0, 24)
-	btn.Position = UDim2.new(1, -126, 0.5, -12)
+	btn.Size = UDim2.new(0, 135, 0, 24)
+	btn.Position = UDim2.new(1, -141, 0.5, -12)
 	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 	btn.Text = options[1]
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.TextSize = 10
+	btn.TextSize = 9
 	btn.Font = Enum.Font.GothamBold
 	btn.AutoButtonColor = false
 	btn.Parent = row
@@ -390,60 +389,64 @@ local function makeButton(labelText, color, callback)
 	end)
 end
 
--- // ANTI-CHEAT SAFE MOVEMENT EXECUTOR // --
-local function executeSafeMovement(root, targetPos)
+-- // SIMULATOR SAFE MOVEMENT EXECUTOR // --
+local function executeSafeMovement(char, targetPos)
 	if not Cfg.AutoWin then return false end
-	local oldNoclip = Cfg.Noclip
-	Cfg.Noclip = true
+	local root = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not root or not hum then return false end
 	
 	if Cfg.AutoWinMode == "Instant TP" then
 		root.CFrame = CFrame.new(targetPos)
 		task.wait(0.2)
-		Cfg.Noclip = oldNoclip
 		return true
 
-	elseif Cfg.AutoWinMode == "Step Teleport" then
-		-- Teleports in small chunks to bypass magnitude checks
-		local startPos = root.Position
-		local dist = (startPos - targetPos).Magnitude
-		local stepSize = Cfg.AutoWinSpeed / 2 
-		local steps = math.max(1, math.floor(dist / stepSize))
+	elseif Cfg.AutoWinMode == "Legit Walk" then
+		-- Physically walks to the end, triggering all checkpoints naturally
+		local done = false
+		local conn
+		conn = hum.MoveToFinished:Connect(function() done = true end)
 		
-		root.Anchored = true
-		for i = 1, steps do
-			if not Cfg.AutoWin then break end
-			root.CFrame = CFrame.new(startPos:Lerp(targetPos, i / steps))
-			task.wait(0.05) -- Let server register the safe small movement
+		hum:MoveTo(targetPos)
+		
+		-- Wait until they reach the end or toggle it off
+		while not done and Cfg.AutoWin and root.Parent do
+			-- Repath every second just in case they get stuck
+			hum:MoveTo(targetPos) 
+			task.wait(1) 
 		end
-		root.CFrame = CFrame.new(targetPos)
-		root.Anchored = false
-		Cfg.Noclip = oldNoclip
+		
+		if conn then conn:Disconnect() end
 		return true
 
 	else
-		-- Anchored Tween: By anchoring the player, physics velocity reads as 0 on the server.
-		root.Anchored = true
-		local dist = (root.Position - targetPos).Magnitude
-		local dur = dist / Cfg.AutoWinSpeed
+		-- Micro-Steps (CFrame): Moves perfectly smoothly frame by frame.
+		-- No velocity physics, highly bypasses magnitude checks if speed is low.
+		local isMoving = true
+		local conn
+		conn = RunService.Heartbeat:Connect(function(deltaTime)
+			if not Cfg.AutoWin or not root.Parent then 
+				isMoving = false
+				conn:Disconnect()
+				return 
+			end
+			
+			local currentPos = root.Position
+			local dist = (currentPos - targetPos).Magnitude
+			
+			if dist < 2 then 
+				isMoving = false
+				conn:Disconnect()
+				return 
+			end
+			
+			local stepSize = Cfg.AutoWinSpeed * deltaTime -- How far to move this specific frame
+			if stepSize > dist then stepSize = dist end
+			
+			root.CFrame = CFrame.new(currentPos, targetPos) * CFrame.new(0, 0, -stepSize)
+		end)
 		
-		local tw = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
-		tw:Play()
-		
-		local done = false
-		local conn = tw.Completed:Connect(function() done = true end)
-		
-		while not done and Cfg.AutoWin and root.Parent do task.wait(0.1) end
-		if conn then conn:Disconnect() end
-		
-		if not Cfg.AutoWin then 
-			tw:Cancel() 
-			root.Anchored = false 
-			Cfg.Noclip = oldNoclip
-			return false 
-		end
-		
-		root.Anchored = false
-		Cfg.Noclip = oldNoclip
+		while isMoving do task.wait(0.1) end
 		return true
 	end
 end
@@ -451,53 +454,44 @@ end
 -- // BUILDING TABS & FEATURES // --
 
 -- AUTO FARM
-makeSectionLabel("AUTO FARM")
-makeToggle("Auto Win (Anti-Cheat Safe)", Color3.fromRGB(210, 140, 65), function(v)
+makeSectionLabel("AUTO FARM (SIMULATORS)")
+makeToggle("Auto Win (Simulator Bypass)", Color3.fromRGB(210, 140, 65), function(v)
 	Cfg.AutoWin = v
 	if v then
 		task.spawn(function()
 			while Cfg.AutoWin do
 				local char = LocalPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				if root and Cfg.WinPos then
-					local dist = (root.Position - Cfg.WinPos).Magnitude
-					if dist > 5 then
-						if Cfg.AutoWinPath == "Straight" then
-							notify("Auto Win", "Moving Straight...", 2)
-							executeSafeMovement(root, Cfg.WinPos)
-						else
-							notify("Auto Win", "Rising...", 2)
-							local risePos = root.Position + Vector3.new(0, Cfg.AutoWinHeight, 0)
-							if not executeSafeMovement(root, risePos) then return end
-							task.wait(0.2)
+				if char then
+					local root = char:FindFirstChild("HumanoidRootPart")
+					if root and Cfg.WinPos then
+						local dist = (root.Position - Cfg.WinPos).Magnitude
+						if dist > 10 then
+							notify("Auto Win", "Executing: " .. Cfg.AutoWinMode, 2)
 							
-							notify("Auto Win", "Traveling...", 2)
-							local tarPos = Vector3.new(Cfg.WinPos.X, risePos.Y, Cfg.WinPos.Z)
-							if not executeSafeMovement(root, tarPos) then return end
-							task.wait(0.2)
+							if Cfg.AutoWinMode ~= "Legit Walk" then Cfg.Noclip = true end
 							
-							notify("Auto Win", "Descending...", 2)
-							if not executeSafeMovement(root, Cfg.WinPos) then return end
+							executeSafeMovement(char, Cfg.WinPos)
+							
+							Cfg.Noclip = false
+							
+							if Cfg.AutoWin then
+								notify("Auto Win", "Resetting Character...", 2)
+								task.wait(1)
+								local h = char:FindFirstChildOfClass("Humanoid")
+								if h then h.Health = 0 end
+								task.wait(5)
+							end
 						end
-
-						notify("Auto Win", "Arrived! Resetting in 3s...", 3)
-						task.wait(3)
-						local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-						if hum then hum.Health = 0 end
-						notify("Auto Win", "Resetting... Next loop in 5s.", 5)
-						task.wait(5)
 					end
 				end
-				task.wait(0.1)
+				task.wait(1)
 			end
 		end)
 	end
 end)
 
-makeDropRow("Pathing", {"Straight", "Rise in Air"}, function(v) Cfg.AutoWinPath = v end)
-makeDropRow("Mode", {"Anchored Tween", "Step Teleport", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
-makeSlider("Auto Win Speed", 10, 300, 50, function(v) Cfg.AutoWinSpeed = v end)
-makeSlider("Auto Win Height", 50, 1000, 250, function(v) Cfg.AutoWinHeight = v end)
+makeDropRow("Bypass Mode", {"Legit Walk", "Micro-Steps (CFrame)", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
+makeSlider("Micro-Step Speed", 10, 300, 50, function(v) Cfg.AutoWinSpeed = v end)
 
 makeDivider()
 
@@ -563,6 +557,7 @@ RunService.Stepped:Connect(function()
 		end
 	end
 
+	-- Only override Walkspeed if Legit Walk isn't currently needing standard speeds
 	if hum and Cfg.WalkSpeed ~= 16 then
 		hum.WalkSpeed = Cfg.WalkSpeed
 	end
@@ -581,7 +576,7 @@ MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	MinBtn.Text = minimized and "+" or "-"
 	TweenService:Create(MainFrame, twInfo, {
-		Size = minimized and UDim2.new(0, 260, 0, 36) or UDim2.new(0, 260, 0, 420)
+		Size = minimized and UDim2.new(0, 260, 0, 36) or UDim2.new(0, 260, 0, 400)
 	}):Play()
 end)
 
@@ -608,4 +603,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Escape Hub", "Bypass Update Loaded!", 5)
+notify("Escape Hub", "Simulator Bypass Loaded!", 5)
