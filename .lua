@@ -12,8 +12,10 @@ local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlaye
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	WinPos        = Vector3.new(-6809.3223, 531.2539, 1468.8073),
-	AutoWinSpeed  = 45,  -- Safe default speed
-	AutoWinHeight = 250, -- Safe default height
+	AutoWinSpeed  = 50,
+	AutoWinHeight = 250,
+	AutoWinPath   = "Straight",        -- "Straight" or "Rise in Air"
+	AutoWinMode   = "Anchored Tween",  -- "Anchored Tween", "Step Teleport", "Instant TP"
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -92,11 +94,6 @@ local function StopFly()
 	end
 end
 
-LocalPlayer.CharacterAdded:Connect(function()
-	task.wait(1)
-	if Cfg.Fly then StartFly() end
-end)
-
 -- // DELETE OLD GUI // --
 for _, v in pairs(guiParent:GetChildren()) do
 	if v.Name == "EscapeHubUI" then v:Destroy() end
@@ -145,13 +142,6 @@ TitlePatch.Position = UDim2.new(0, 0, 0.5, 0)
 TitlePatch.BackgroundColor3 = Color3.fromRGB(26, 26, 32)
 TitlePatch.BorderSizePixel = 0
 TitlePatch.Parent = TitleBar
-
-local TitleBarStroke = Instance.new("Frame")
-TitleBarStroke.Size = UDim2.new(1, 0, 0, 1)
-TitleBarStroke.Position = UDim2.new(0, 0, 1, 0)
-TitleBarStroke.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-TitleBarStroke.BorderSizePixel = 0
-TitleBarStroke.Parent = TitleBar
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -50, 1, 0)
@@ -221,6 +211,45 @@ local function makeDivider()
 	div.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 	div.BorderSizePixel = 0
 	div.Parent = ScrollFrame
+end
+
+local function makeDropRow(labelText, options, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 34)
+	row.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+	row.Parent = ScrollFrame
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(0.4, 0, 1, 0)
+	lbl.Position = UDim2.new(0, 10, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = labelText
+	lbl.TextColor3 = Color3.fromRGB(210, 210, 220)
+	lbl.TextSize = 11
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Parent = row
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 120, 0, 24)
+	btn.Position = UDim2.new(1, -126, 0.5, -12)
+	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+	btn.Text = options[1]
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextSize = 10
+	btn.Font = Enum.Font.GothamBold
+	btn.AutoButtonColor = false
+	btn.Parent = row
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+	local index = 1
+	btn.MouseButton1Click:Connect(function()
+		index = index + 1
+		if index > #options then index = 1 end
+		btn.Text = options[index]
+		callback(options[index])
+	end)
 end
 
 local function makeToggle(labelText, onColor, callback)
@@ -330,22 +359,13 @@ local function makeSlider(labelText, min, max, defaultVal, callback)
 	end
 
 	trackBg.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			update(input)
-		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true update(input) end
 	end)
-
 	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
 	end)
-
 	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			update(input)
-		end
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then update(input) end
 	end)
 end
 
@@ -370,58 +390,69 @@ local function makeButton(labelText, color, callback)
 	end)
 end
 
--- // TWEEN HELPER FUNCTION // --
-local function performSmoothTween(root, targetPos)
+-- // ANTI-CHEAT SAFE MOVEMENT EXECUTOR // --
+local function executeSafeMovement(root, targetPos)
 	if not Cfg.AutoWin then return false end
-	local distance = (root.Position - targetPos).Magnitude
-	local duration = distance / Cfg.AutoWinSpeed
+	local oldNoclip = Cfg.Noclip
+	Cfg.Noclip = true
 	
-	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
-	local tween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
-	
-	tween:Play()
-	
-	-- We wait for completion but keep checking if user turned it off so we can cancel it mid-air
-	local completed = false
-	local conn
-	conn = tween.Completed:Connect(function() completed = true end)
-	
-	while not completed and Cfg.AutoWin and root.Parent do
-		task.wait(0.1)
+	if Cfg.AutoWinMode == "Instant TP" then
+		root.CFrame = CFrame.new(targetPos)
+		task.wait(0.2)
+		Cfg.Noclip = oldNoclip
+		return true
+
+	elseif Cfg.AutoWinMode == "Step Teleport" then
+		-- Teleports in small chunks to bypass magnitude checks
+		local startPos = root.Position
+		local dist = (startPos - targetPos).Magnitude
+		local stepSize = Cfg.AutoWinSpeed / 2 
+		local steps = math.max(1, math.floor(dist / stepSize))
+		
+		root.Anchored = true
+		for i = 1, steps do
+			if not Cfg.AutoWin then break end
+			root.CFrame = CFrame.new(startPos:Lerp(targetPos, i / steps))
+			task.wait(0.05) -- Let server register the safe small movement
+		end
+		root.CFrame = CFrame.new(targetPos)
+		root.Anchored = false
+		Cfg.Noclip = oldNoclip
+		return true
+
+	else
+		-- Anchored Tween: By anchoring the player, physics velocity reads as 0 on the server.
+		root.Anchored = true
+		local dist = (root.Position - targetPos).Magnitude
+		local dur = dist / Cfg.AutoWinSpeed
+		
+		local tw = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
+		tw:Play()
+		
+		local done = false
+		local conn = tw.Completed:Connect(function() done = true end)
+		
+		while not done and Cfg.AutoWin and root.Parent do task.wait(0.1) end
+		if conn then conn:Disconnect() end
+		
+		if not Cfg.AutoWin then 
+			tw:Cancel() 
+			root.Anchored = false 
+			Cfg.Noclip = oldNoclip
+			return false 
+		end
+		
+		root.Anchored = false
+		Cfg.Noclip = oldNoclip
+		return true
 	end
-	
-	if conn then conn:Disconnect() end
-	if not Cfg.AutoWin or not root.Parent then
-		tween:Cancel()
-		return false
-	end
-	
-	return true
 end
 
 -- // BUILDING TABS & FEATURES // --
 
 -- AUTO FARM
 makeSectionLabel("AUTO FARM")
-makeToggle("Auto Walk", Color3.fromRGB(120, 190, 100), function(v)
-	Cfg.AutoWalk = v
-	if v then
-		task.spawn(function()
-			while Cfg.AutoWalk do
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if hum then
-					hum:Move(Vector3.new(0, 0, 1), true)
-					task.wait(0.1)
-					hum:Move(Vector3.new(0, 0, -1), true)
-				end
-				task.wait(0.1)
-			end
-		end)
-	end
-end)
-
-makeToggle("Auto Win (Smooth)", Color3.fromRGB(210, 140, 65), function(v)
+makeToggle("Auto Win (Anti-Cheat Safe)", Color3.fromRGB(210, 140, 65), function(v)
 	Cfg.AutoWin = v
 	if v then
 		task.spawn(function()
@@ -431,37 +462,28 @@ makeToggle("Auto Win (Smooth)", Color3.fromRGB(210, 140, 65), function(v)
 				if root and Cfg.WinPos then
 					local dist = (root.Position - Cfg.WinPos).Magnitude
 					if dist > 5 then
-						-- 1. Setup states
-						if not Cfg.Fly then Cfg.Fly = true StartFly() end
-						local oldNoclip = Cfg.Noclip
-						Cfg.Noclip = true
-
-						-- 2. Phase 1: Rise safely
-						notify("Auto Win", "Rising up safely...", 2)
-						local risePos = root.Position + Vector3.new(0, Cfg.AutoWinHeight, 0)
-						if not performSmoothTween(root, risePos) then Cfg.Noclip = oldNoclip return end
-						task.wait(0.2)
-
-						-- 3. Phase 2: Travel horizontally
-						notify("Auto Win", "Traveling to destination...", 2)
-						local targetPos = Vector3.new(Cfg.WinPos.X, risePos.Y, Cfg.WinPos.Z)
-						if not performSmoothTween(root, targetPos) then Cfg.Noclip = oldNoclip return end
-						task.wait(0.2)
-
-						-- 4. Phase 3: Descend safely
-						notify("Auto Win", "Descending safely...", 2)
-						if not performSmoothTween(root, Cfg.WinPos) then Cfg.Noclip = oldNoclip return end
-
-						-- 5. Complete
-						Cfg.Noclip = oldNoclip
-						StopFly() 
+						if Cfg.AutoWinPath == "Straight" then
+							notify("Auto Win", "Moving Straight...", 2)
+							executeSafeMovement(root, Cfg.WinPos)
+						else
+							notify("Auto Win", "Rising...", 2)
+							local risePos = root.Position + Vector3.new(0, Cfg.AutoWinHeight, 0)
+							if not executeSafeMovement(root, risePos) then return end
+							task.wait(0.2)
+							
+							notify("Auto Win", "Traveling...", 2)
+							local tarPos = Vector3.new(Cfg.WinPos.X, risePos.Y, Cfg.WinPos.Z)
+							if not executeSafeMovement(root, tarPos) then return end
+							task.wait(0.2)
+							
+							notify("Auto Win", "Descending...", 2)
+							if not executeSafeMovement(root, Cfg.WinPos) then return end
+						end
 
 						notify("Auto Win", "Arrived! Resetting in 3s...", 3)
 						task.wait(3)
-
 						local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
 						if hum then hum.Health = 0 end
-
 						notify("Auto Win", "Resetting... Next loop in 5s.", 5)
 						task.wait(5)
 					end
@@ -472,7 +494,9 @@ makeToggle("Auto Win (Smooth)", Color3.fromRGB(210, 140, 65), function(v)
 	end
 end)
 
-makeSlider("Auto Win Speed", 10, 200, 45, function(v) Cfg.AutoWinSpeed = v end)
+makeDropRow("Pathing", {"Straight", "Rise in Air"}, function(v) Cfg.AutoWinPath = v end)
+makeDropRow("Mode", {"Anchored Tween", "Step Teleport", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
+makeSlider("Auto Win Speed", 10, 300, 50, function(v) Cfg.AutoWinSpeed = v end)
 makeSlider("Auto Win Height", 50, 1000, 250, function(v) Cfg.AutoWinHeight = v end)
 
 makeDivider()
@@ -584,4 +608,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Escape Hub", "Loaded Successfully!", 5)
+notify("Escape Hub", "Bypass Update Loaded!", 5)
