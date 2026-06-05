@@ -12,8 +12,8 @@ local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlaye
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	WinPos        = Vector3.new(-6809.3223, 531.2539, 1468.8073),
-	AutoWinSpeed  = 50,  
-	AutoWinMode   = "Legit Walk",  -- "Legit Walk", "Micro-Steps", "Instant TP"
+	AutoWinSpeed  = 150,  
+	AutoWinMode   = "Gate Sweeper (Fast)",  -- "Smart Walk (Legit)", "Gate Sweeper (Fast)", "Instant TP"
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -94,6 +94,7 @@ local function StopFly()
 	if hum then hum.PlatformStand = false hum:ChangeState(Enum.HumanoidStateType.Running) end
 end
 
+-- // NEW WALK-TO-WIN SPECIFIC BYPASSES // --
 local function executeSafeMovement(char, targetPos)
 	if not Cfg.AutoWin then return false end
 	local root = char:FindFirstChild("HumanoidRootPart")
@@ -101,32 +102,62 @@ local function executeSafeMovement(char, targetPos)
 	if not root or not hum then return false end
 	
 	if Cfg.AutoWinMode == "Instant TP" then
+		-- Only works if the game doesn't have track checkpoints
 		root.CFrame = CFrame.new(targetPos)
 		task.wait(0.2)
 		return true
-	elseif Cfg.AutoWinMode == "Legit Walk" then
-		local done = false
-		local conn = hum.MoveToFinished:Connect(function() done = true end)
-		hum:MoveTo(targetPos)
-		while not done and Cfg.AutoWin and root.Parent do
-			hum:MoveTo(targetPos) 
-			task.wait(1) 
+
+	elseif Cfg.AutoWinMode == "Smart Walk (Legit)" then
+		-- Physically walks using waypoints (bypasses Roblox's MoveTo distance limits)
+		local startPos = root.Position
+		local flatTarget = Vector3.new(targetPos.X, startPos.Y, targetPos.Z) 
+		local dist = (flatTarget - startPos).Magnitude
+		local dir = (flatTarget - startPos).Unit
+		
+		local step = 50
+		local walked = 0
+		
+		while walked < dist and Cfg.AutoWin do
+			walked = math.min(walked + step, dist)
+			local nextPoint = startPos + (dir * walked)
+			hum:MoveTo(nextPoint)
+			
+			local timeout = tick()
+			while (root.Position - nextPoint).Magnitude > 5 and Cfg.AutoWin do
+				if tick() - timeout > 4 then break end -- Re-issue command if stuck
+				task.wait(0.1)
+			end
 		end
-		if conn then conn:Disconnect() end
+		
+		if Cfg.AutoWin then
+			hum:MoveTo(targetPos)
+			task.wait(1.5)
+		end
 		return true
-	else
-		-- Micro-Steps
-		local isMoving = true
-		local conn
-		conn = RunService.Heartbeat:Connect(function(dt)
-			if not Cfg.AutoWin or not root.Parent then isMoving = false conn:Disconnect() return end
-			local currPos = root.Position
-			local dist = (currPos - targetPos).Magnitude
-			if dist < 2 then isMoving = false conn:Disconnect() return end
-			local stepSize = math.min(Cfg.AutoWinSpeed * dt, dist)
-			root.CFrame = CFrame.new(currPos, targetPos) * CFrame.new(0, 0, -stepSize)
-		end)
-		while isMoving do task.wait(0.1) end
+
+	elseif Cfg.AutoWinMode == "Gate Sweeper (Fast)" then
+		-- Teleports forward in chunks. This registers EVERY invisible checkpoint
+		-- between you and the finish line without having to actually walk it.
+		local startPos = root.Position
+		local dist = (targetPos - startPos).Magnitude
+		local dir = (targetPos - startPos).Unit
+		
+		local stepSize = Cfg.AutoWinSpeed / 5 -- Calculate chunk size
+		local walked = 0
+		
+		while walked < dist and Cfg.AutoWin do
+			walked = math.min(walked + stepSize, dist)
+			local nextPos = startPos + (dir * walked)
+			
+			root.CFrame = CFrame.new(nextPos)
+			
+			-- We MUST wait a tiny bit so the server's physics engine can process 
+			-- the TouchEvent for the checkpoint we just jumped into.
+			task.wait(0.05) 
+		end
+		
+		root.CFrame = CFrame.new(targetPos)
+		task.wait(0.2)
 		return true
 	end
 end
@@ -418,13 +449,13 @@ local function CreateDropdown(parent, text, options, callback)
 	Lbl.Parent = Row
 
 	local Btn = Instance.new("TextButton")
-	Btn.Size = UDim2.new(0, 130, 0, 24)
-	Btn.Position = UDim2.new(1, -145, 0.5, -12)
+	Btn.Size = UDim2.new(0, 150, 0, 24)
+	Btn.Position = UDim2.new(1, -165, 0.5, -12)
 	Btn.BackgroundColor3 = Theme.MainBG
 	Btn.Text = options[1]
 	Btn.TextColor3 = Theme.Accent
 	Btn.Font = Enum.Font.Montserrat
-	Btn.TextSize = 11
+	Btn.TextSize = 10
 	Btn.AutoButtonColor = false
 	Btn.Parent = Row
 	Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
@@ -471,8 +502,8 @@ local TabChar = CreateTab("Player")
 local TabMisc = CreateTab("Misc")
 
 -- Auto Farm Tab
-CreateDropdown(TabFarm, "Bypass Method", {"Legit Walk", "Micro-Steps", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
-CreateSlider(TabFarm, "Micro-Step Speed", 10, 300, 50, function(v) Cfg.AutoWinSpeed = v end)
+CreateDropdown(TabFarm, "Bypass Method", {"Gate Sweeper (Fast)", "Smart Walk (Legit)", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
+CreateSlider(TabFarm, "Gate Sweeper Speed", 10, 500, 150, function(v) Cfg.AutoWinSpeed = v end)
 CreateToggle(TabFarm, "Enable Auto Win", function(v)
 	Cfg.AutoWin = v
 	if v then
@@ -484,8 +515,11 @@ CreateToggle(TabFarm, "Enable Auto Win", function(v)
 					if root and Cfg.WinPos then
 						local dist = (root.Position - Cfg.WinPos).Magnitude
 						if dist > 10 then
-							if Cfg.AutoWinMode ~= "Legit Walk" then Cfg.Noclip = true end
+							if Cfg.AutoWinMode ~= "Smart Walk (Legit)" then Cfg.Noclip = true end
+							
+							notify("Octa Hub", "Running: " .. Cfg.AutoWinMode, 2)
 							executeSafeMovement(char, Cfg.WinPos)
+							
 							Cfg.Noclip = false
 							
 							if Cfg.AutoWin then
@@ -589,4 +623,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Successfully Injected", 4)
+notify("Octa Hub", "Checkpoint Bypass Active!", 4)
