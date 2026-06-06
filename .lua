@@ -48,6 +48,10 @@ local SafePaths = {
 	}
 }
 
+-- Ordered lists
+local W1Keys = {"1 Win", "3 Wins", "10 Wins", "20 Wins", "50 Wins", "100 Wins", "150 Wins", "300 Wins", "500 Wins", "1000 Wins", "2500 Wins", "10000 Wins", "25000 Wins"}
+local W2Keys = {"250k Wins", "400k Wins", "600k Wins", "1M Wins", "1.5M Wins", "2.5M Wins", "4M Wins", "6M Wins", "10M Wins", "15M Wins", "16M Wins"}
+
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	SelectedWorld = "World 1",
@@ -82,6 +86,84 @@ local function notify(title, text, time)
 	pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 }) end)
 end
 
+-- // OBSTACLE DELETION LOGIC // --
+local function safeDestroy(parent, childName)
+	if parent then
+		local child = parent:FindFirstChild(childName)
+		if child then child:Destroy() end
+	end
+end
+
+local function deleteObstacles()
+	if Cfg.SelectedWorld == "World 1" then
+		local npcPiege = workspace:FindFirstChild("NPC & Piege")
+		if npcPiege then
+			safeDestroy(npcPiege, "Zone1")
+			safeDestroy(npcPiege, "CorridorTrap")
+			safeDestroy(npcPiege, "LavaTower")
+			safeDestroy(npcPiege, "NPC_Zone10")
+			safeDestroy(npcPiege, "NPC_Zone12")
+		end
+	elseif Cfg.SelectedWorld == "World 2" then
+		local w2 = workspace:FindFirstChild("WORLD 2")
+		if w2 then
+			local stage10 = w2:FindFirstChild("Stage10")
+			if stage10 then
+				safeDestroy(stage10, "DoorWall1")
+				safeDestroy(stage10, "DoorWall2")
+				safeDestroy(stage10, "DoorWall3")
+			end
+			for _, desc in pairs(w2:GetDescendants()) do
+				if desc.Name == "MovingWalls" or desc.Name == "Wind" or desc.Name == "Ventilateurs" then
+					desc:Destroy()
+				end
+			end
+		end
+		
+		local piegesLava = workspace:FindFirstChild("Pieges & Lava")
+		if piegesLava then
+			safeDestroy(piegesLava, "Lava_Stage3")
+			safeDestroy(piegesLava, "Twomps")
+			safeDestroy(piegesLava, "FanEffects")
+		end
+		
+		local npcPiege2 = workspace:FindFirstChild("NPC & Piege")
+		if npcPiege2 then
+			safeDestroy(npcPiege2, "NPC_Zone5")
+			safeDestroy(npcPiege2, "NPC_Zone9")
+		end
+		
+		local keycaps = workspace:FindFirstChild("Keycaps")
+		if keycaps then
+			local function disableBridge(bridgeName)
+				local b = keycaps:FindFirstChild(bridgeName)
+				if b then
+					local bridgePart = b:FindFirstChild("Bridge")
+					if bridgePart then safeDestroy(bridgePart, "TouchInterest") end
+				end
+			end
+			disableBridge("Stage10Bridge")
+			disableBridge("Stage10Bridge2")
+			disableBridge("Stage10Bridge3")
+		end
+		
+		task.spawn(function()
+			for i = 1, 10 do
+				task.wait(1)
+				local pL = workspace:FindFirstChild("Pieges & Lava")
+				if pL then safeDestroy(pL, "FanEffects") end
+				local w2_loop = workspace:FindFirstChild("WORLD 2")
+				if w2_loop then
+					for _, desc in pairs(w2_loop:GetDescendants()) do
+						if desc.Name == "Wind" or desc.Name == "Ventilateurs" then desc:Destroy() end
+					end
+				end
+			end
+		end)
+	end
+	notify("Octa Hub", "Obstacles deleted for " .. Cfg.SelectedWorld .. "!", 4)
+end
+
 -- // SEQUENTIAL TWEEN LOGIC // --
 local activeTween = nil
 
@@ -90,14 +172,12 @@ local function tweenToTarget(targetPos, speed)
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	
-	-- Checks if player exists AND is alive
 	if not root or not hum or hum.Health <= 0 then return false end
 	
 	local dist = (root.Position - targetPos).Magnitude
-	if dist < 2 then return true end -- Skip if already close enough
+	if dist < 2 then return true end 
 	
 	local duration = dist / speed
-	
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 	activeTween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
 	
@@ -107,10 +187,7 @@ local function tweenToTarget(targetPos, speed)
 	
 	activeTween:Play()
 	
-	-- Constantly checks health during the flight. If you die, it breaks.
-	while not completed and Cfg.AutoWin and root.Parent and hum.Health > 0 do 
-		task.wait(0.05) 
-	end
+	while not completed and Cfg.AutoWin and root.Parent and hum.Health > 0 do task.wait(0.05) end
 	
 	if connection then connection:Disconnect() end
 	if activeTween then activeTween:Cancel() activeTween = nil end
@@ -224,14 +301,12 @@ local function updateESP()
 							bg.Parent = head
 							espGuis[plr] = {bg, txt}
 						end
-
 						local displayStr = ""
 						if Cfg.ESP_Names then displayStr = plr.Name end
 						if Cfg.ESP_Distance and lpRoot and root then
 							local dist = math.floor((lpRoot.Position - root.Position).Magnitude)
 							displayStr = displayStr .. (displayStr ~= "" and " | " or "") .. dist .. "m"
 						end
-						
 						espGuis[plr][2].Text = displayStr
 						espGuis[plr][1].Parent = head
 					end
@@ -585,6 +660,7 @@ local TabMisc = CreateTab("Misc")
 
 -- Auto Farm Tab
 CreateDropdown(TabFarm, "Select World", {"World 1", "World 2"}, function(v) Cfg.SelectedWorld = v end)
+CreateButton(TabFarm, "Delete Obstacles", deleteObstacles)
 CreateSlider(TabFarm, "Smooth Tween Speed", 30, 200, 120, function(v) Cfg.AutoWinSpeed = v end)
 
 CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
@@ -610,7 +686,7 @@ CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
 						local success = tweenToTarget(targetPos, Cfg.AutoWinSpeed)
 						if not success then 
 							finishedCourse = false 
-							break -- Broke because player died or AutoWin was turned off
+							break 
 						end 
 						
 						task.wait(0.01) 
@@ -625,7 +701,7 @@ CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
 						task.wait(3) 
 					elseif not finishedCourse and Cfg.AutoWin then
 						notify("Octa Hub", "Died! Resetting path progress...", 2)
-						task.wait(2) -- Wait for the game to respawn you
+						task.wait(2)
 					end
 				else
 					task.wait(1)
@@ -740,4 +816,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Death-Failsafe Updated!", 4)
+notify("Octa Hub", "Obstacle Destroyer Added!", 4)
