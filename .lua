@@ -11,8 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
--- // EXACT SAFE PATH WAYPOINTS FROM ORIGINAL SCRIPT // --
--- These perfectly zig-zag around the mobs to keep distance
+-- // EXACT SAFE PATH WAYPOINTS // --
 local SafePaths = {
 	["World 1"] = {
 		Vector3.new(2.81, 7.68, 129.98), Vector3.new(-0.48, 7.68, 284.92), Vector3.new(50.45, 7.68, 399.32),
@@ -52,7 +51,7 @@ local SafePaths = {
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	SelectedWorld = "World 1",
-	AutoWinSpeed  = 120, -- Default Smooth Speed
+	AutoWinSpeed  = 120, 
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -89,14 +88,16 @@ local activeTween = nil
 local function tweenToTarget(targetPos, speed)
 	local char = LocalPlayer.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return false end
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	
+	-- Checks if player exists AND is alive
+	if not root or not hum or hum.Health <= 0 then return false end
 	
 	local dist = (root.Position - targetPos).Magnitude
-	if dist < 2 then return Cfg.AutoWin end -- Skip if already close enough
+	if dist < 2 then return true end -- Skip if already close enough
 	
 	local duration = dist / speed
 	
-	-- Perfect linear gliding speed
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 	activeTween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
 	
@@ -106,13 +107,15 @@ local function tweenToTarget(targetPos, speed)
 	
 	activeTween:Play()
 	
-	-- Keep checking if AutoWin is turned off so we can cancel it mid-air
-	while not completed and Cfg.AutoWin and root.Parent do task.wait(0.05) end
+	-- Constantly checks health during the flight. If you die, it breaks.
+	while not completed and Cfg.AutoWin and root.Parent and hum.Health > 0 do 
+		task.wait(0.05) 
+	end
 	
 	if connection then connection:Disconnect() end
 	if activeTween then activeTween:Cancel() activeTween = nil end
 	
-	return Cfg.AutoWin
+	return Cfg.AutoWin and root.Parent ~= nil and hum.Health > 0
 end
 
 -- // AUTO RECONNECT LOGIC // --
@@ -590,35 +593,43 @@ CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
 		task.spawn(function()
 			while Cfg.AutoWin do
 				local char = LocalPlayer.Character
-				if char and char:FindFirstChild("HumanoidRootPart") then
-					
-					Cfg.Noclip = true -- Prevent bumping into walls during tween
-					
-					-- Grabs the full list of safe nodes that naturally go around the mobs
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				
+				if char and root and hum and hum.Health > 0 then
+					Cfg.Noclip = true 
 					local safePathNodes = SafePaths[Cfg.SelectedWorld]
+					local finishedCourse = true
 					
-					-- Loop through every node dot-to-dot
 					for _, targetPos in ipairs(safePathNodes) do
-						if not Cfg.AutoWin then break end
+						if not Cfg.AutoWin then 
+							finishedCourse = false 
+							break 
+						end
 						
-						-- Execute the smooth tween
 						local success = tweenToTarget(targetPos, Cfg.AutoWinSpeed)
-						if not success then break end 
+						if not success then 
+							finishedCourse = false 
+							break -- Broke because player died or AutoWin was turned off
+						end 
 						
-						task.wait(0.01) -- Tiny pause to let server physics register touch
+						task.wait(0.01) 
 					end
 					
 					Cfg.Noclip = false
 					
-					if Cfg.AutoWin then
+					if Cfg.AutoWin and finishedCourse then
 						notify("Octa Hub", "Course Completed! Resetting...", 3)
-						task.wait(1)
-						local h = char:FindFirstChildOfClass("Humanoid")
-						if h then h.Health = 0 end
-						task.wait(5) -- Wait for character to respawn
+						task.wait(0.5)
+						if hum then hum.Health = 0 end
+						task.wait(3) 
+					elseif not finishedCourse and Cfg.AutoWin then
+						notify("Octa Hub", "Died! Resetting path progress...", 2)
+						task.wait(2) -- Wait for the game to respawn you
 					end
+				else
+					task.wait(1)
 				end
-				task.wait(1)
 			end
 		end)
 	end
@@ -729,4 +740,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Smart Path Bypasses Loaded!", 4)
+notify("Octa Hub", "Death-Failsafe Updated!", 4)
