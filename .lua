@@ -3,54 +3,56 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
--- // EXACT WIN COORDINATES // --
-local WinTargets = {
+-- // EXACT SAFE PATH WAYPOINTS FROM ORIGINAL SCRIPT // --
+-- These perfectly zig-zag around the mobs to keep distance
+local SafePaths = {
 	["World 1"] = {
-		["1 Win"] = Vector3.new(-13.25, 11.31, 285.25),
-		["3 Wins"] = Vector3.new(-16.12, 10.65, 507.26),
-		["10 Wins"] = Vector3.new(-15.92, 77.92, 774.04),
-		["20 Wins"] = Vector3.new(-14.89, 78.94, 1108.95),
-		["50 Wins"] = Vector3.new(-20.89, 78.4, 1412.88),
-		["100 Wins"] = Vector3.new(-539.85, 55.15, 1448.3),
-		["150 Wins"] = Vector3.new(-1008.4, 55.29, 1451.05),
-		["300 Wins"] = Vector3.new(-1123.63, 298.61, 1452.2),
-		["500 Wins"] = Vector3.new(-2973.39, 299.56, 1449.55),
-		["1000 Wins"] = Vector3.new(-3939.01, 299.56, 1447.85),
-		["2500 Wins"] = Vector3.new(-4368.75, 474.62, 1513.47),
-		["10000 Wins"] = Vector3.new(-5341.17, 472.4, 1459.22),
-		["25000 Wins"] = Vector3.new(-5398.84, 469.43, 1459.22)
+		Vector3.new(2.81, 7.68, 129.98), Vector3.new(-0.48, 7.68, 284.92), Vector3.new(50.45, 7.68, 399.32),
+		Vector3.new(0.22, 7.68, 504.8), Vector3.new(-12.28, 7.68, 526.86), Vector3.new(-15.79, 7.68, 559.83),
+		Vector3.new(-16.23, 49.29, 677.16), Vector3.new(-15.94, 75.96, 757.34), Vector3.new(17.74, 75.96, 789.65),
+		Vector3.new(15.94, 75.96, 929.52), Vector3.new(3.16, 75.96, 1111.83), Vector3.new(4.08, 75.96, 1150.4),
+		Vector3.new(0.54, 75.96, 1365.5), Vector3.new(1.57, 75.96, 1414.83), Vector3.new(-126.49, 53.31, 1444.94),
+		Vector3.new(-433.16, 53.31, 1463.62), Vector3.new(-546.43, 53.32, 1463.7), Vector3.new(-712.52, 53.32, 1465.25),
+		Vector3.new(-1007.36, 53.32, 1466.5), Vector3.new(-1080.07, 53.32, 1468.84), Vector3.new(-1080.09, 322.48, 1468.84),
+		Vector3.new(-1122.78, 295.32, 1465.14), Vector3.new(-1244.95, 302.75, 1470.11), Vector3.new(-1858.42, 314.87, 1464.63),
+		Vector3.new(-2520.88, 321.59, 1464.34), Vector3.new(-2972.63, 295.32, 1465.91), Vector3.new(-3251.58, 295.32, 1468.47),
+		Vector3.new(-3732.62, 295.32, 1464.91), Vector3.new(-3943.55, 295.32, 1466.12), Vector3.new(-4123.24, 295.32, 1467.74),
+		Vector3.new(-4296.84, 295.32, 1471.44), Vector3.new(-4314.44, 472.78, 1528.26), Vector3.new(-4368.97, 469.83, 1530.54),
+		Vector3.new(-4584.82, 469.65, 1529.69), Vector3.new(-4628.37, 469.65, 1141.16), Vector3.new(-5046.67, 469.65, 1588.44),
+		Vector3.new(-5266.65, 469.65, 1477.57), Vector3.new(-5341.57, 469.43, 1477.3), Vector3.new(-5398.84, 469.43, 1459.22)
 	},
 	["World 2"] = {
-		["250k Wins"] = Vector3.new(-415.55, 500.99, 189.32),
-		["400k Wins"] = Vector3.new(-416.32, 500.83, 433.69),
-		["600k Wins"] = Vector3.new(-417.61, 608.64, 607.74),
-		["1M Wins"] = Vector3.new(-418.31, 608.6, 841.45),
-		["1.5M Wins"] = Vector3.new(-415.33, 608.22, 1261.47),
-		["2.5M Wins"] = Vector3.new(-417.13, 625.91, 2413.93),
-		["4M Wins"] = Vector3.new(-413.79, 624.07, 2650.47),
-		["6M Wins"] = Vector3.new(-414.19, 626.78, 3159.31),
-		["10M Wins"] = Vector3.new(-59.9, 624.76, 3881.49),
-		["15M Wins"] = Vector3.new(595.68, 624.85, 3863.84),
-		["16M Wins"] = Vector3.new(544.92, 622.38, 3863.84)
+		Vector3.new(-397.34, 503.82, -117.26), Vector3.new(-394.85, 503.82, -48.88), Vector3.new(-396.17, 502.65, -6.19),
+		Vector3.new(-399.47, 502.91, 64.58), Vector3.new(-401.78, 502.91, 128.13), Vector3.new(-394.48, 498.99, 190.61),
+		Vector3.new(-399.82, 498.99, 267.71), Vector3.new(-400.21, 498.99, 341.16), Vector3.new(-400.58, 498.99, 412.84),
+		Vector3.new(-391.59, 498.85, 465.59), Vector3.new(-345.09, 498.85, 468.92), Vector3.new(-347.68, 525.92, 578.02),
+		Vector3.new(-455.16, 525.92, 576.05), Vector3.new(-454.9, 552.92, 463.35), Vector3.new(-347.07, 552.92, 464.38),
+		Vector3.new(-345.93, 579.99, 577.71), Vector3.new(-453.01, 579.99, 578.51), Vector3.new(-449.94, 606.99, 465.45),
+		Vector3.new(-398.96, 606.99, 467.96), Vector3.new(-399.56, 606.78, 615.39), Vector3.new(-400.07, 626.87, 748.33),
+		Vector3.new(-400.47, 606.34, 844.2), Vector3.new(-399.26, 606.34, 1050.49), Vector3.new(-400.15, 606.34, 1275.53),
+		Vector3.new(-390.74, 616.23, 1327.35), Vector3.new(-391.24, 606.34, 1454.43), Vector3.new(-361.57, 627.13, 1601.27),
+		Vector3.new(-359.82, 604.22, 1715.61), Vector3.new(-359.21, 614.4, 1787.58), Vector3.new(-397.93, 606.35, 1922.74),
+		Vector3.new(-396.77, 606.34, 2103.07), Vector3.new(-395.8, 606.34, 2247.85), Vector3.new(-395.34, 616.58, 2312.83),
+		Vector3.new(-400.62, 622.28, 2401.14), Vector3.new(-402.18, 622.24, 2521.79), Vector3.new(-403.84, 622.23, 2650.09),
+		Vector3.new(-398.01, 622.24, 2734.83), Vector3.new(-396.32, 622.24, 2854.44), Vector3.new(-399.09, 622.24, 2977.76),
+		Vector3.new(-402.67, 622.25, 3156.06), Vector3.new(-325.14, 622.25, 3338.71), Vector3.new(-210.07, 622.25, 3651.9),
+		Vector3.new(-100.59, 622.25, 3857.55), Vector3.new(-59.9, 624.76, 3881.49), Vector3.new(188.2, 622.41, 3863.21),
+		Vector3.new(544.92, 622.38, 3863.84), Vector3.new(595.68, 624.85, 3863.84)
 	}
 }
-
--- Ordered lists to ensure it tweens sequentially
-local W1Keys = {"1 Win", "3 Wins", "10 Wins", "20 Wins", "50 Wins", "100 Wins", "150 Wins", "300 Wins", "500 Wins", "1000 Wins", "2500 Wins", "10000 Wins", "25000 Wins"}
-local W2Keys = {"250k Wins", "400k Wins", "600k Wins", "1M Wins", "1.5M Wins", "2.5M Wins", "4M Wins", "6M Wins", "10M Wins", "15M Wins", "16M Wins"}
 
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	SelectedWorld = "World 1",
-	AutoWinSpeed  = 75,
-	AvoidMobs     = true,
-	SafeHeight    = 50, -- How high above the mobs to fly
+	AutoWinSpeed  = 120, -- Default Smooth Speed
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -58,10 +60,11 @@ local Cfg = {
 	JumpPower     = 50,
 	InfiniteJump  = false,
 	AutoWin       = false,
+	AutoReconnect = false,
 	ESP_Enabled   = false,
 	ESP_Names     = false,
 	ESP_Distance  = false,
-	ESP_Color     = Color3.fromRGB(255, 50, 50)
+	ESP_Color     = Color3.fromRGB(0, 255, 100)
 }
 
 -- // THEME COLORS // --
@@ -80,20 +83,20 @@ local function notify(title, text, time)
 	pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 }) end)
 end
 
--- // SEQUENTIAL & ELEVATED TWEEN LOGIC // --
+-- // SEQUENTIAL TWEEN LOGIC // --
 local activeTween = nil
 
-local function doSingleTween(targetPos, speed)
+local function tweenToTarget(targetPos, speed)
 	local char = LocalPlayer.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not root then return false end
 	
 	local dist = (root.Position - targetPos).Magnitude
-	-- Prevent division by zero if we are already there
-	if dist < 1 then return Cfg.AutoWin end 
+	if dist < 2 then return Cfg.AutoWin end -- Skip if already close enough
 	
 	local duration = dist / speed
 	
+	-- Perfect linear gliding speed
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 	activeTween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
 	
@@ -103,9 +106,8 @@ local function doSingleTween(targetPos, speed)
 	
 	activeTween:Play()
 	
-	while not completed and Cfg.AutoWin and root.Parent do
-		task.wait(0.05)
-	end
+	-- Keep checking if AutoWin is turned off so we can cancel it mid-air
+	while not completed and Cfg.AutoWin and root.Parent do task.wait(0.05) end
 	
 	if connection then connection:Disconnect() end
 	if activeTween then activeTween:Cancel() activeTween = nil end
@@ -113,35 +115,16 @@ local function doSingleTween(targetPos, speed)
 	return Cfg.AutoWin
 end
 
-local function executeSafeTarget(targetPos, speed)
-	if not Cfg.AvoidMobs then
-		-- Straight line
-		return doSingleTween(targetPos, speed)
-	else
-		local char = LocalPlayer.Character
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not root then return false end
-		
-		local safeY = targetPos.Y + Cfg.SafeHeight
-		
-		-- Step 1: Fly straight up to safe height
-		local upPos = Vector3.new(root.Position.X, safeY, root.Position.Z)
-		if not doSingleTween(upPos, speed) then return false end
-		
-		-- Step 2: Fly horizontally across the sky (above the mobs)
-		local hoverPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
-		if not doSingleTween(hoverPos, speed) then return false end
-		
-		-- Step 3: Drop straight down onto the Win Block
-		if not doSingleTween(targetPos, speed) then return false end
-		
-		return true
+-- // AUTO RECONNECT LOGIC // --
+GuiService.ErrorMessageChanged:Connect(function()
+	if Cfg.AutoReconnect then
+		task.wait(0.5)
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
 	end
-end
+end)
 
--- // CORE FLY LOGIC // --
+-- // CORE MOVEMENT LOGIC // --
 local FlyBV, FlyBG, FlyConn
-
 local function StartFly()
 	local char = LocalPlayer.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -194,7 +177,6 @@ end
 -- // ESP LOGIC // --
 local espHighlights = {}
 local espGuis = {}
-
 local function updateESP()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= LocalPlayer then
@@ -260,7 +242,6 @@ local function updateESP()
 		end
 	end
 end
-
 task.spawn(function() while task.wait(0.1) do updateESP() end end)
 Players.PlayerRemoving:Connect(function(plr)
 	if espHighlights[plr] then espHighlights[plr]:Destroy() espHighlights[plr] = nil end
@@ -347,7 +328,6 @@ Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 10)
 -- // TAB SYSTEM // --
 local Tabs = {}
 local activeTab = nil
-
 local function CreateTab(name)
 	local TabBtn = Instance.new("TextButton")
 	TabBtn.Size = UDim2.new(1, -20, 0, 30)
@@ -383,9 +363,7 @@ local function CreateTab(name)
 	Pad.PaddingRight = UDim.new(0, 15)
 	Pad.Parent = Scroll
 
-	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 20)
-	end)
+	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 20) end)
 
 	TabBtn.MouseButton1Click:Connect(function()
 		if activeTab then
@@ -406,7 +384,6 @@ local function CreateTab(name)
 		Marker.Position = UDim2.new(0, 0, 0.2, 0)
 		Scroll.Visible = true
 	end
-
 	return Scroll
 end
 
@@ -573,14 +550,6 @@ local function CreateDropdown(parent, text, options, callback)
 		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.MainBG}):Play()
 		callback(currentOptions[idx])
 	end)
-	
-	function obj:Refresh(newOptions)
-		currentOptions = newOptions
-		idx = 1
-		Btn.Text = currentOptions[1]
-		callback(currentOptions[1])
-	end
-	
 	return obj
 end
 
@@ -612,16 +581,10 @@ local TabChar = CreateTab("Player")
 local TabMisc = CreateTab("Misc")
 
 -- Auto Farm Tab
-CreateDropdown(TabFarm, "Select World", {"World 1", "World 2"}, function(v) 
-	Cfg.SelectedWorld = v 
-end)
+CreateDropdown(TabFarm, "Select World", {"World 1", "World 2"}, function(v) Cfg.SelectedWorld = v end)
+CreateSlider(TabFarm, "Smooth Tween Speed", 30, 200, 120, function(v) Cfg.AutoWinSpeed = v end)
 
-CreateSlider(TabFarm, "Tween Speed", 30, 200, 75, function(v) Cfg.AutoWinSpeed = v end)
-
-CreateToggle(TabFarm, "Avoid Mobs (Elevated Path)", true, function(v) Cfg.AvoidMobs = v end)
-CreateSlider(TabFarm, "Safe Path Height", 10, 200, 50, function(v) Cfg.SafeHeight = v end)
-
-CreateToggle(TabFarm, "Enable Seqential Auto Win", false, function(v)
+CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
 	Cfg.AutoWin = v
 	if v then
 		task.spawn(function()
@@ -631,26 +594,18 @@ CreateToggle(TabFarm, "Enable Seqential Auto Win", false, function(v)
 					
 					Cfg.Noclip = true -- Prevent bumping into walls during tween
 					
-					local currentKeys = (Cfg.SelectedWorld == "World 1") and W1Keys or W2Keys
-					local currentTargets = WinTargets[Cfg.SelectedWorld]
+					-- Grabs the full list of safe nodes that naturally go around the mobs
+					local safePathNodes = SafePaths[Cfg.SelectedWorld]
 					
-					-- Loop through every win block in order
-					for _, targetKey in ipairs(currentKeys) do
+					-- Loop through every node dot-to-dot
+					for _, targetPos in ipairs(safePathNodes) do
 						if not Cfg.AutoWin then break end
 						
-						local targetPos = currentTargets[targetKey]
-						if Cfg.AvoidMobs then
-							notify("Octa Hub", "Hovering to: " .. targetKey, 1.5)
-						else
-							notify("Octa Hub", "Gliding to: " .. targetKey, 1.5)
-						end
-						
-						-- Execute the Elevated/Hover Safe Movement
-						local success = executeSafeTarget(targetPos, Cfg.AutoWinSpeed)
+						-- Execute the smooth tween
+						local success = tweenToTarget(targetPos, Cfg.AutoWinSpeed)
 						if not success then break end 
 						
-						-- Wait a split second to ensure the block registers the touch
-						task.wait(0.1)
+						task.wait(0.01) -- Tiny pause to let server physics register touch
 					end
 					
 					Cfg.Noclip = false
@@ -673,10 +628,10 @@ end)
 CreateToggle(TabVisuals, "Enable Player Highlight", false, function(v) Cfg.ESP_Enabled = v end)
 CreateToggle(TabVisuals, "Show Player Names", false, function(v) Cfg.ESP_Names = v end)
 CreateToggle(TabVisuals, "Show Distance", false, function(v) Cfg.ESP_Distance = v end)
-CreateDropdown(TabVisuals, "Highlight Color", {"Red", "Cyan", "Green", "White", "Pink", "Yellow"}, function(v)
+CreateDropdown(TabVisuals, "Highlight Color", {"Green", "Cyan", "Red", "White", "Pink", "Yellow"}, function(v)
 	if v == "Red" then Cfg.ESP_Color = Color3.fromRGB(255, 50, 50)
 	elseif v == "Cyan" then Cfg.ESP_Color = Color3.fromRGB(0, 230, 255)
-	elseif v == "Green" then Cfg.ESP_Color = Color3.fromRGB(50, 255, 50)
+	elseif v == "Green" then Cfg.ESP_Color = Color3.fromRGB(0, 255, 100)
 	elseif v == "White" then Cfg.ESP_Color = Color3.fromRGB(255, 255, 255)
 	elseif v == "Pink" then Cfg.ESP_Color = Color3.fromRGB(255, 100, 200)
 	elseif v == "Yellow" then Cfg.ESP_Color = Color3.fromRGB(255, 255, 50) end
@@ -701,6 +656,7 @@ end)
 CreateToggle(TabChar, "Infinite Jump", false, function(v) Cfg.InfiniteJump = v end)
 
 -- Misc Tab
+CreateToggle(TabMisc, "Auto Reconnect (Anti-Kick)", false, function(v) Cfg.AutoReconnect = v end)
 CreateButton(TabMisc, "Enable Anti-AFK", function()
 	local vu = game:GetService("VirtualUser")
 	LocalPlayer.Idled:Connect(function()
@@ -716,6 +672,7 @@ CreateButton(TabMisc, "Unload Hub", function()
 	Cfg.ESP_Enabled = false
 	Cfg.ESP_Names = false
 	Cfg.ESP_Distance = false
+	Cfg.AutoReconnect = false
 	if activeTween then activeTween:Cancel() end
 	StopFly()
 	ScreenGui:Destroy()
@@ -772,4 +729,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Elevated Safe-Path Loaded!", 4)
+notify("Octa Hub", "Smart Path Bypasses Loaded!", 4)
