@@ -9,11 +9,48 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
+-- // EXACT WIN COORDINATES EXTRACTED FROM SCRIPT // --
+local WinTargets = {
+	["World 1"] = {
+		["1 Win"] = Vector3.new(-13.25, 11.31, 285.25),
+		["3 Wins"] = Vector3.new(-16.12, 10.65, 507.26),
+		["10 Wins"] = Vector3.new(-15.92, 77.92, 774.04),
+		["20 Wins"] = Vector3.new(-14.89, 78.94, 1108.95),
+		["50 Wins"] = Vector3.new(-20.89, 78.4, 1412.88),
+		["100 Wins"] = Vector3.new(-539.85, 55.15, 1448.3),
+		["150 Wins"] = Vector3.new(-1008.4, 55.29, 1451.05),
+		["300 Wins"] = Vector3.new(-1123.63, 298.61, 1452.2),
+		["500 Wins"] = Vector3.new(-2973.39, 299.56, 1449.55),
+		["1000 Wins"] = Vector3.new(-3939.01, 299.56, 1447.85),
+		["2500 Wins"] = Vector3.new(-4368.75, 474.62, 1513.47),
+		["10000 Wins"] = Vector3.new(-5341.17, 472.4, 1459.22),
+		["25000 Wins"] = Vector3.new(-5398.84, 469.43, 1459.22)
+	},
+	["World 2"] = {
+		["250k Wins"] = Vector3.new(-415.55, 500.99, 189.32),
+		["400k Wins"] = Vector3.new(-416.32, 500.83, 433.69),
+		["600k Wins"] = Vector3.new(-417.61, 608.64, 607.74),
+		["1M Wins"] = Vector3.new(-418.31, 608.6, 841.45),
+		["1.5M Wins"] = Vector3.new(-415.33, 608.22, 1261.47),
+		["2.5M Wins"] = Vector3.new(-417.13, 625.91, 2413.93),
+		["4M Wins"] = Vector3.new(-413.79, 624.07, 2650.47),
+		["6M Wins"] = Vector3.new(-414.19, 626.78, 3159.31),
+		["10M Wins"] = Vector3.new(-59.9, 624.76, 3881.49),
+		["15M Wins"] = Vector3.new(595.68, 624.85, 3863.84),
+		["16M Wins"] = Vector3.new(544.92, 622.38, 3863.84)
+	}
+}
+
+local W1Keys = {"1 Win", "3 Wins", "10 Wins", "20 Wins", "50 Wins", "100 Wins", "150 Wins", "300 Wins", "500 Wins", "1000 Wins", "2500 Wins", "10000 Wins", "25000 Wins"}
+local W2Keys = {"250k Wins", "400k Wins", "600k Wins", "1M Wins", "1.5M Wins", "2.5M Wins", "4M Wins", "6M Wins", "10M Wins", "15M Wins", "16M Wins"}
+
 -- // CONFIGURATION STATE // --
 local Cfg = {
-	WinPos        = Vector3.new(-6809.3223, 531.2539, 1468.8073),
+	SelectedWorld = "World 1",
+	SelectedTarget = "1 Win",
+	WinPos        = WinTargets["World 1"]["1 Win"],
 	AutoWinSpeed  = 150,  
-	AutoWinMode   = "Gate Sweeper (Fast)",  -- "Smart Walk (Legit)", "Gate Sweeper (Fast)", "Instant TP"
+	AutoWinMode   = "Gate Sweeper (Fast)",  
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -21,7 +58,6 @@ local Cfg = {
 	JumpPower     = 50,
 	InfiniteJump  = false,
 	AutoWin       = false,
-	-- ESP Settings
 	ESP_Enabled   = false,
 	ESP_Names     = false,
 	ESP_Distance  = false,
@@ -33,7 +69,7 @@ local Theme = {
 	MainBG = Color3.fromRGB(15, 15, 20),
 	SideBG = Color3.fromRGB(22, 22, 28),
 	TopBG  = Color3.fromRGB(20, 20, 25),
-	Accent = Color3.fromRGB(0, 230, 255), -- Neon Cyan
+	Accent = Color3.fromRGB(0, 230, 255),
 	Text   = Color3.fromRGB(240, 240, 255),
 	SubText= Color3.fromRGB(150, 150, 170),
 	ElementBG = Color3.fromRGB(28, 28, 35)
@@ -41,9 +77,7 @@ local Theme = {
 
 -- // NOTIFICATION // --
 local function notify(title, text, time)
-	pcall(function()
-		game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 })
-	end)
+	pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 }) end)
 end
 
 -- // CORE MOVEMENT LOGIC // --
@@ -162,7 +196,6 @@ local function updateESP()
 		if plr ~= LocalPlayer then
 			local char = plr.Character
 			if char then
-				-- Highlight Logic
 				if Cfg.ESP_Enabled then
 					if not espHighlights[plr] then
 						local hl = Instance.new("Highlight")
@@ -173,15 +206,11 @@ local function updateESP()
 						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 						hl.Parent = char
 						espHighlights[plr] = hl
-					else
-						espHighlights[plr].OutlineColor = Cfg.ESP_Color
-						espHighlights[plr].Parent = char
-					end
+					else espHighlights[plr].OutlineColor = Cfg.ESP_Color espHighlights[plr].Parent = char end
 				else
 					if espHighlights[plr] then espHighlights[plr]:Destroy() espHighlights[plr] = nil end
 				end
 
-				-- Names & Distance Logic
 				local head = char:FindFirstChild("Head")
 				local root = char:FindFirstChild("HumanoidRootPart")
 				local lpRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -228,20 +257,14 @@ local function updateESP()
 	end
 end
 
-task.spawn(function()
-	while task.wait(0.1) do updateESP() end
-end)
-
+task.spawn(function() while task.wait(0.1) do updateESP() end end)
 Players.PlayerRemoving:Connect(function(plr)
 	if espHighlights[plr] then espHighlights[plr]:Destroy() espHighlights[plr] = nil end
 	if espGuis[plr] then espGuis[plr][1]:Destroy() espGuis[plr] = nil end
 end)
 
-
 -- // DELETE OLD GUI // --
-for _, v in pairs(guiParent:GetChildren()) do
-	if v.Name == "OctaHubUI" then v:Destroy() end
-end
+for _, v in pairs(guiParent:GetChildren()) do if v.Name == "OctaHubUI" then v:Destroy() end end
 
 -- // UI SETUP // --
 local ScreenGui = Instance.new("ScreenGui")
@@ -251,8 +274,8 @@ ScreenGui.Parent = guiParent
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 500, 0, 320)
-MainFrame.Position = UDim2.new(0.5, -250, 0.5, -160)
+MainFrame.Size = UDim2.new(0, 520, 0, 360)
+MainFrame.Position = UDim2.new(0.5, -260, 0.5, -180)
 MainFrame.BackgroundColor3 = Theme.MainBG
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -495,15 +518,9 @@ local function CreateSlider(parent, text, min, max, def, callback)
 		callback(val)
 	end
 
-	Track.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true update(input) end
-	end)
-	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then update(input) end
-	end)
+	Track.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true update(input) end end)
+	UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end end)
+	UserInputService.InputChanged:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then update(input) end end)
 end
 
 local function CreateDropdown(parent, text, options, callback)
@@ -525,8 +542,8 @@ local function CreateDropdown(parent, text, options, callback)
 	Lbl.Parent = Row
 
 	local Btn = Instance.new("TextButton")
-	Btn.Size = UDim2.new(0, 150, 0, 24)
-	Btn.Position = UDim2.new(1, -165, 0.5, -12)
+	Btn.Size = UDim2.new(0, 160, 0, 24)
+	Btn.Position = UDim2.new(1, -175, 0.5, -12)
 	Btn.BackgroundColor3 = Theme.MainBG
 	Btn.Text = options[1]
 	Btn.TextColor3 = Theme.Accent
@@ -540,15 +557,27 @@ local function CreateDropdown(parent, text, options, callback)
 	btnStroke.Thickness = 1
 	btnStroke.Parent = Btn
 
+	local obj = {}
+	local currentOptions = options
 	local idx = 1
+
 	Btn.MouseButton1Click:Connect(function()
-		idx = (idx % #options) + 1
-		Btn.Text = options[idx]
+		idx = (idx % #currentOptions) + 1
+		Btn.Text = currentOptions[idx]
 		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.SideBG}):Play()
 		task.wait(0.1)
 		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.MainBG}):Play()
-		callback(options[idx])
+		callback(currentOptions[idx])
 	end)
+	
+	function obj:Refresh(newOptions)
+		currentOptions = newOptions
+		idx = 1
+		Btn.Text = currentOptions[1]
+		callback(currentOptions[1])
+	end
+	
+	return obj
 end
 
 local function CreateButton(parent, text, callback)
@@ -579,6 +608,18 @@ local TabChar = CreateTab("Player")
 local TabMisc = CreateTab("Misc")
 
 -- Auto Farm Tab
+local targetDrop -- Forward declaration
+
+CreateDropdown(TabFarm, "Select World", {"World 1", "World 2"}, function(v) 
+	Cfg.SelectedWorld = v 
+	if v == "World 1" then targetDrop:Refresh(W1Keys) else targetDrop:Refresh(W2Keys) end
+end)
+
+targetDrop = CreateDropdown(TabFarm, "Target Win Block", W1Keys, function(v) 
+	Cfg.SelectedTarget = v
+	Cfg.WinPos = WinTargets[Cfg.SelectedWorld][v]
+end)
+
 CreateDropdown(TabFarm, "Bypass Method", {"Gate Sweeper (Fast)", "Smart Walk (Legit)", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
 CreateSlider(TabFarm, "Gate Sweeper Speed", 10, 500, 150, function(v) Cfg.AutoWinSpeed = v end)
 CreateToggle(TabFarm, "Enable Auto Win", function(v)
@@ -594,7 +635,7 @@ CreateToggle(TabFarm, "Enable Auto Win", function(v)
 						if dist > 10 then
 							if Cfg.AutoWinMode ~= "Smart Walk (Legit)" then Cfg.Noclip = true end
 							
-							notify("Octa Hub", "Running: " .. Cfg.AutoWinMode, 2)
+							notify("Octa Hub", "Traveling to " .. Cfg.SelectedTarget, 2)
 							executeSafeMovement(char, Cfg.WinPos)
 							
 							Cfg.Noclip = false
@@ -695,7 +736,7 @@ MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	MinBtn.Text = minimized and "+" or "—"
 	TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-		Size = minimized and UDim2.new(0, 500, 0, 35) or UDim2.new(0, 500, 0, 320)
+		Size = minimized and UDim2.new(0, 520, 0, 35) or UDim2.new(0, 520, 0, 360)
 	}):Play()
 end)
 
@@ -716,4 +757,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "ESP & Bypass Update Loaded!", 4)
+notify("Octa Hub", "Full Coordinates Loaded!", 4)
