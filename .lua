@@ -48,7 +48,9 @@ local W2Keys = {"250k Wins", "400k Wins", "600k Wins", "1M Wins", "1.5M Wins", "
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	SelectedWorld = "World 1",
-	AutoWinSpeed  = 75, -- Default balanced smooth speed
+	AutoWinSpeed  = 75,
+	AvoidMobs     = true,
+	SafeHeight    = 50, -- How high above the mobs to fly
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -78,30 +80,29 @@ local function notify(title, text, time)
 	pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 }) end)
 end
 
--- // SEQUENTIAL TWEEN LOGIC // --
+-- // SEQUENTIAL & ELEVATED TWEEN LOGIC // --
 local activeTween = nil
 
-local function tweenToTarget(targetPos, speed)
+local function doSingleTween(targetPos, speed)
 	local char = LocalPlayer.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not root then return false end
 	
 	local dist = (root.Position - targetPos).Magnitude
+	-- Prevent division by zero if we are already there
+	if dist < 1 then return Cfg.AutoWin end 
+	
 	local duration = dist / speed
 	
-	-- Use Linear easing so it moves at a constant, smooth speed
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 	activeTween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
 	
 	local completed = false
 	local connection
-	connection = activeTween.Completed:Connect(function()
-		completed = true
-	end)
+	connection = activeTween.Completed:Connect(function() completed = true end)
 	
 	activeTween:Play()
 	
-	-- Keep checking if AutoWin is turned off so we can cancel it mid-air
 	while not completed and Cfg.AutoWin and root.Parent do
 		task.wait(0.05)
 	end
@@ -109,10 +110,36 @@ local function tweenToTarget(targetPos, speed)
 	if connection then connection:Disconnect() end
 	if activeTween then activeTween:Cancel() activeTween = nil end
 	
-	return Cfg.AutoWin -- Returns true if we made it, false if user turned off AutoWin
+	return Cfg.AutoWin
 end
 
--- // CORE MOVEMENT LOGIC // --
+local function executeSafeTarget(targetPos, speed)
+	if not Cfg.AvoidMobs then
+		-- Straight line
+		return doSingleTween(targetPos, speed)
+	else
+		local char = LocalPlayer.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if not root then return false end
+		
+		local safeY = targetPos.Y + Cfg.SafeHeight
+		
+		-- Step 1: Fly straight up to safe height
+		local upPos = Vector3.new(root.Position.X, safeY, root.Position.Z)
+		if not doSingleTween(upPos, speed) then return false end
+		
+		-- Step 2: Fly horizontally across the sky (above the mobs)
+		local hoverPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
+		if not doSingleTween(hoverPos, speed) then return false end
+		
+		-- Step 3: Drop straight down onto the Win Block
+		if not doSingleTween(targetPos, speed) then return false end
+		
+		return true
+	end
+end
+
+-- // CORE FLY LOGIC // --
 local FlyBV, FlyBG, FlyConn
 
 local function StartFly()
@@ -384,7 +411,7 @@ local function CreateTab(name)
 end
 
 -- // COMPONENT BUILDERS // --
-local function CreateToggle(parent, text, callback)
+local function CreateToggle(parent, text, defaultVal, callback)
 	local Row = Instance.new("Frame")
 	Row.Size = UDim2.new(1, 0, 0, 36)
 	Row.BackgroundColor3 = Theme.ElementBG
@@ -409,12 +436,12 @@ local function CreateToggle(parent, text, callback)
 	Box.Parent = Row
 	Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
 	local BoxStroke = Instance.new("UIStroke")
-	BoxStroke.Color = Theme.SubText
+	BoxStroke.Color = defaultVal and Theme.Accent or Theme.SubText
 	BoxStroke.Thickness = 1
 	BoxStroke.Parent = Box
 
 	local Check = Instance.new("Frame")
-	Check.Size = UDim2.new(0, 0, 0, 0)
+	Check.Size = defaultVal and UDim2.new(1, -8, 1, -8) or UDim2.new(0, 0, 0, 0)
 	Check.Position = UDim2.new(0.5, 0, 0.5, 0)
 	Check.BackgroundColor3 = Theme.Accent
 	Check.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -427,7 +454,7 @@ local function CreateToggle(parent, text, callback)
 	Btn.Text = ""
 	Btn.Parent = Row
 
-	local active = false
+	local active = defaultVal
 	Btn.MouseButton1Click:Connect(function()
 		active = not active
 		if active then
@@ -591,7 +618,10 @@ end)
 
 CreateSlider(TabFarm, "Tween Speed", 30, 200, 75, function(v) Cfg.AutoWinSpeed = v end)
 
-CreateToggle(TabFarm, "Enable Seqential Auto Win", function(v)
+CreateToggle(TabFarm, "Avoid Mobs (Elevated Path)", true, function(v) Cfg.AvoidMobs = v end)
+CreateSlider(TabFarm, "Safe Path Height", 10, 200, 50, function(v) Cfg.SafeHeight = v end)
+
+CreateToggle(TabFarm, "Enable Seqential Auto Win", false, function(v)
 	Cfg.AutoWin = v
 	if v then
 		task.spawn(function()
@@ -609,10 +639,14 @@ CreateToggle(TabFarm, "Enable Seqential Auto Win", function(v)
 						if not Cfg.AutoWin then break end
 						
 						local targetPos = currentTargets[targetKey]
-						notify("Octa Hub", "Gliding to: " .. targetKey, 1.5)
+						if Cfg.AvoidMobs then
+							notify("Octa Hub", "Hovering to: " .. targetKey, 1.5)
+						else
+							notify("Octa Hub", "Gliding to: " .. targetKey, 1.5)
+						end
 						
-						-- Execute the smooth tween
-						local success = tweenToTarget(targetPos, Cfg.AutoWinSpeed)
+						-- Execute the Elevated/Hover Safe Movement
+						local success = executeSafeTarget(targetPos, Cfg.AutoWinSpeed)
 						if not success then break end 
 						
 						-- Wait a split second to ensure the block registers the touch
@@ -636,9 +670,9 @@ CreateToggle(TabFarm, "Enable Seqential Auto Win", function(v)
 end)
 
 -- Visuals / ESP Tab
-CreateToggle(TabVisuals, "Enable Player Highlight", function(v) Cfg.ESP_Enabled = v end)
-CreateToggle(TabVisuals, "Show Player Names", function(v) Cfg.ESP_Names = v end)
-CreateToggle(TabVisuals, "Show Distance", function(v) Cfg.ESP_Distance = v end)
+CreateToggle(TabVisuals, "Enable Player Highlight", false, function(v) Cfg.ESP_Enabled = v end)
+CreateToggle(TabVisuals, "Show Player Names", false, function(v) Cfg.ESP_Names = v end)
+CreateToggle(TabVisuals, "Show Distance", false, function(v) Cfg.ESP_Distance = v end)
 CreateDropdown(TabVisuals, "Highlight Color", {"Red", "Cyan", "Green", "White", "Pink", "Yellow"}, function(v)
 	if v == "Red" then Cfg.ESP_Color = Color3.fromRGB(255, 50, 50)
 	elseif v == "Cyan" then Cfg.ESP_Color = Color3.fromRGB(0, 230, 255)
@@ -649,9 +683,9 @@ CreateDropdown(TabVisuals, "Highlight Color", {"Red", "Cyan", "Green", "White", 
 end)
 
 -- Movement Tab
-CreateToggle(TabMove, "Enable Fly (WASD)", function(v) Cfg.Fly = v if v then StartFly() else StopFly() end end)
+CreateToggle(TabMove, "Enable Fly (WASD)", false, function(v) Cfg.Fly = v if v then StartFly() else StopFly() end end)
 CreateSlider(TabMove, "Fly Speed", 10, 2000, 300, function(v) Cfg.FlySpeed = v end)
-CreateToggle(TabMove, "Enable Noclip", function(v) Cfg.Noclip = v end)
+CreateToggle(TabMove, "Enable Noclip", false, function(v) Cfg.Noclip = v end)
 
 -- Player Tab
 CreateSlider(TabChar, "Walk Speed", 16, 500, 16, function(v)
@@ -664,7 +698,7 @@ CreateSlider(TabChar, "Jump Power", 50, 500, 50, function(v)
 	local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
 	if h then h.UseJumpPower = true h.JumpPower = v end
 end)
-CreateToggle(TabChar, "Infinite Jump", function(v) Cfg.InfiniteJump = v end)
+CreateToggle(TabChar, "Infinite Jump", false, function(v) Cfg.InfiniteJump = v end)
 
 -- Misc Tab
 CreateButton(TabMisc, "Enable Anti-AFK", function()
@@ -738,4 +772,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Sequential Tween Mode Loaded!", 4)
+notify("Octa Hub", "Elevated Safe-Path Loaded!", 4)
