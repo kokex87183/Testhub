@@ -9,7 +9,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
--- // EXACT WIN COORDINATES EXTRACTED FROM SCRIPT // --
+-- // EXACT WIN COORDINATES // --
 local WinTargets = {
 	["World 1"] = {
 		["1 Win"] = Vector3.new(-13.25, 11.31, 285.25),
@@ -41,16 +41,14 @@ local WinTargets = {
 	}
 }
 
+-- Ordered lists to ensure it tweens sequentially
 local W1Keys = {"1 Win", "3 Wins", "10 Wins", "20 Wins", "50 Wins", "100 Wins", "150 Wins", "300 Wins", "500 Wins", "1000 Wins", "2500 Wins", "10000 Wins", "25000 Wins"}
 local W2Keys = {"250k Wins", "400k Wins", "600k Wins", "1M Wins", "1.5M Wins", "2.5M Wins", "4M Wins", "6M Wins", "10M Wins", "15M Wins", "16M Wins"}
 
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	SelectedWorld = "World 1",
-	SelectedTarget = "1 Win",
-	WinPos        = WinTargets["World 1"]["1 Win"],
-	AutoWinSpeed  = 150,  
-	AutoWinMode   = "Gate Sweeper (Fast)",  
+	AutoWinSpeed  = 75, -- Default balanced smooth speed
 	Fly           = false,
 	FlySpeed      = 300,
 	Noclip        = false,
@@ -78,6 +76,40 @@ local Theme = {
 -- // NOTIFICATION // --
 local function notify(title, text, time)
 	pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 }) end)
+end
+
+-- // SEQUENTIAL TWEEN LOGIC // --
+local activeTween = nil
+
+local function tweenToTarget(targetPos, speed)
+	local char = LocalPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return false end
+	
+	local dist = (root.Position - targetPos).Magnitude
+	local duration = dist / speed
+	
+	-- Use Linear easing so it moves at a constant, smooth speed
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+	activeTween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
+	
+	local completed = false
+	local connection
+	connection = activeTween.Completed:Connect(function()
+		completed = true
+	end)
+	
+	activeTween:Play()
+	
+	-- Keep checking if AutoWin is turned off so we can cancel it mid-air
+	while not completed and Cfg.AutoWin and root.Parent do
+		task.wait(0.05)
+	end
+	
+	if connection then connection:Disconnect() end
+	if activeTween then activeTween:Cancel() activeTween = nil end
+	
+	return Cfg.AutoWin -- Returns true if we made it, false if user turned off AutoWin
 end
 
 -- // CORE MOVEMENT LOGIC // --
@@ -130,61 +162,6 @@ local function StopFly()
 	if FlyBG then FlyBG:Destroy(); FlyBG = nil end
 	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
 	if hum then hum.PlatformStand = false hum:ChangeState(Enum.HumanoidStateType.Running) end
-end
-
-local function executeSafeMovement(char, targetPos)
-	if not Cfg.AutoWin then return false end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not root or not hum then return false end
-	
-	if Cfg.AutoWinMode == "Instant TP" then
-		root.CFrame = CFrame.new(targetPos)
-		task.wait(0.2)
-		return true
-
-	elseif Cfg.AutoWinMode == "Smart Walk (Legit)" then
-		local startPos = root.Position
-		local flatTarget = Vector3.new(targetPos.X, startPos.Y, targetPos.Z) 
-		local dist = (flatTarget - startPos).Magnitude
-		local dir = (flatTarget - startPos).Unit
-		local step = 50
-		local walked = 0
-		
-		while walked < dist and Cfg.AutoWin do
-			walked = math.min(walked + step, dist)
-			local nextPoint = startPos + (dir * walked)
-			hum:MoveTo(nextPoint)
-			local timeout = tick()
-			while (root.Position - nextPoint).Magnitude > 5 and Cfg.AutoWin do
-				if tick() - timeout > 4 then break end 
-				task.wait(0.1)
-			end
-		end
-		
-		if Cfg.AutoWin then
-			hum:MoveTo(targetPos)
-			task.wait(1.5)
-		end
-		return true
-
-	elseif Cfg.AutoWinMode == "Gate Sweeper (Fast)" then
-		local startPos = root.Position
-		local dist = (targetPos - startPos).Magnitude
-		local dir = (targetPos - startPos).Unit
-		local stepSize = Cfg.AutoWinSpeed / 5 
-		local walked = 0
-		
-		while walked < dist and Cfg.AutoWin do
-			walked = math.min(walked + stepSize, dist)
-			root.CFrame = CFrame.new(startPos + (dir * walked))
-			task.wait(0.05) 
-		end
-		
-		root.CFrame = CFrame.new(targetPos)
-		task.wait(0.2)
-		return true
-	end
 end
 
 -- // ESP LOGIC // --
@@ -608,45 +585,48 @@ local TabChar = CreateTab("Player")
 local TabMisc = CreateTab("Misc")
 
 -- Auto Farm Tab
-local targetDrop -- Forward declaration
-
 CreateDropdown(TabFarm, "Select World", {"World 1", "World 2"}, function(v) 
 	Cfg.SelectedWorld = v 
-	if v == "World 1" then targetDrop:Refresh(W1Keys) else targetDrop:Refresh(W2Keys) end
 end)
 
-targetDrop = CreateDropdown(TabFarm, "Target Win Block", W1Keys, function(v) 
-	Cfg.SelectedTarget = v
-	Cfg.WinPos = WinTargets[Cfg.SelectedWorld][v]
-end)
+CreateSlider(TabFarm, "Tween Speed", 30, 200, 75, function(v) Cfg.AutoWinSpeed = v end)
 
-CreateDropdown(TabFarm, "Bypass Method", {"Gate Sweeper (Fast)", "Smart Walk (Legit)", "Instant TP"}, function(v) Cfg.AutoWinMode = v end)
-CreateSlider(TabFarm, "Gate Sweeper Speed", 10, 500, 150, function(v) Cfg.AutoWinSpeed = v end)
-CreateToggle(TabFarm, "Enable Auto Win", function(v)
+CreateToggle(TabFarm, "Enable Seqential Auto Win", function(v)
 	Cfg.AutoWin = v
 	if v then
 		task.spawn(function()
 			while Cfg.AutoWin do
 				local char = LocalPlayer.Character
-				if char then
-					local root = char:FindFirstChild("HumanoidRootPart")
-					if root and Cfg.WinPos then
-						local dist = (root.Position - Cfg.WinPos).Magnitude
-						if dist > 10 then
-							if Cfg.AutoWinMode ~= "Smart Walk (Legit)" then Cfg.Noclip = true end
-							
-							notify("Octa Hub", "Traveling to " .. Cfg.SelectedTarget, 2)
-							executeSafeMovement(char, Cfg.WinPos)
-							
-							Cfg.Noclip = false
-							
-							if Cfg.AutoWin then
-								task.wait(1)
-								local h = char:FindFirstChildOfClass("Humanoid")
-								if h then h.Health = 0 end
-								task.wait(5)
-							end
-						end
+				if char and char:FindFirstChild("HumanoidRootPart") then
+					
+					Cfg.Noclip = true -- Prevent bumping into walls during tween
+					
+					local currentKeys = (Cfg.SelectedWorld == "World 1") and W1Keys or W2Keys
+					local currentTargets = WinTargets[Cfg.SelectedWorld]
+					
+					-- Loop through every win block in order
+					for _, targetKey in ipairs(currentKeys) do
+						if not Cfg.AutoWin then break end
+						
+						local targetPos = currentTargets[targetKey]
+						notify("Octa Hub", "Gliding to: " .. targetKey, 1.5)
+						
+						-- Execute the smooth tween
+						local success = tweenToTarget(targetPos, Cfg.AutoWinSpeed)
+						if not success then break end 
+						
+						-- Wait a split second to ensure the block registers the touch
+						task.wait(0.1)
+					end
+					
+					Cfg.Noclip = false
+					
+					if Cfg.AutoWin then
+						notify("Octa Hub", "Course Completed! Resetting...", 3)
+						task.wait(1)
+						local h = char:FindFirstChildOfClass("Humanoid")
+						if h then h.Health = 0 end
+						task.wait(5) -- Wait for character to respawn
 					end
 				end
 				task.wait(1)
@@ -702,6 +682,7 @@ CreateButton(TabMisc, "Unload Hub", function()
 	Cfg.ESP_Enabled = false
 	Cfg.ESP_Names = false
 	Cfg.ESP_Distance = false
+	if activeTween then activeTween:Cancel() end
 	StopFly()
 	ScreenGui:Destroy()
 end)
@@ -757,4 +738,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Full Coordinates Loaded!", 4)
+notify("Octa Hub", "Sequential Tween Mode Loaded!", 4)
