@@ -48,10 +48,6 @@ local SafePaths = {
 	}
 }
 
--- Ordered lists
-local W1Keys = {"1 Win", "3 Wins", "10 Wins", "20 Wins", "50 Wins", "100 Wins", "150 Wins", "300 Wins", "500 Wins", "1000 Wins", "2500 Wins", "10000 Wins", "25000 Wins"}
-local W2Keys = {"250k Wins", "400k Wins", "600k Wins", "1M Wins", "1.5M Wins", "2.5M Wins", "4M Wins", "6M Wins", "10M Wins", "15M Wins", "16M Wins"}
-
 -- // CONFIGURATION STATE // --
 local Cfg = {
 	SelectedWorld = "World 1",
@@ -63,22 +59,18 @@ local Cfg = {
 	JumpPower     = 50,
 	InfiniteJump  = false,
 	AutoWin       = false,
-	AutoReconnect = false,
-	ESP_Enabled   = false,
-	ESP_Names     = false,
-	ESP_Distance  = false,
-	ESP_Color     = Color3.fromRGB(0, 255, 100)
+	AutoReconnect = false
 }
 
--- // THEME COLORS // --
+-- // NEW SLEEK THEME // --
 local Theme = {
-	MainBG = Color3.fromRGB(15, 15, 20),
-	SideBG = Color3.fromRGB(22, 22, 28),
-	TopBG  = Color3.fromRGB(20, 20, 25),
-	Accent = Color3.fromRGB(0, 230, 255),
-	Text   = Color3.fromRGB(240, 240, 255),
-	SubText= Color3.fromRGB(150, 150, 170),
-	ElementBG = Color3.fromRGB(28, 28, 35)
+	MainBG = Color3.fromRGB(22, 22, 25),
+	SideBG = Color3.fromRGB(18, 18, 20),
+	TopBG  = Color3.fromRGB(15, 15, 17),
+	Accent = Color3.fromRGB(85, 170, 255), -- Nice modern cyan/blue
+	Text   = Color3.fromRGB(245, 245, 245),
+	SubText= Color3.fromRGB(140, 140, 150),
+	ElementBG = Color3.fromRGB(30, 30, 35)
 }
 
 -- // NOTIFICATION // --
@@ -254,78 +246,6 @@ local function StopFly()
 	if hum then hum.PlatformStand = false hum:ChangeState(Enum.HumanoidStateType.Running) end
 end
 
--- // ESP LOGIC // --
-local espHighlights = {}
-local espGuis = {}
-local function updateESP()
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			local char = plr.Character
-			if char then
-				if Cfg.ESP_Enabled then
-					if not espHighlights[plr] then
-						local hl = Instance.new("Highlight")
-						hl.Name = "OctaESP"
-						hl.FillTransparency = 1
-						hl.OutlineTransparency = 0
-						hl.OutlineColor = Cfg.ESP_Color
-						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-						hl.Parent = char
-						espHighlights[plr] = hl
-					else espHighlights[plr].OutlineColor = Cfg.ESP_Color espHighlights[plr].Parent = char end
-				else
-					if espHighlights[plr] then espHighlights[plr]:Destroy() espHighlights[plr] = nil end
-				end
-
-				local head = char:FindFirstChild("Head")
-				local root = char:FindFirstChild("HumanoidRootPart")
-				local lpRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
-				if Cfg.ESP_Names or Cfg.ESP_Distance then
-					if head then
-						if not espGuis[plr] then
-							local bg = Instance.new("BillboardGui")
-							bg.Name = "OctaNameTag"
-							bg.Adornee = head
-							bg.Size = UDim2.new(0, 200, 0, 20)
-							bg.StudsOffset = Vector3.new(0, 2.5, 0)
-							bg.AlwaysOnTop = true
-							local txt = Instance.new("TextLabel")
-							txt.Size = UDim2.new(1, 0, 1, 0)
-							txt.BackgroundTransparency = 1
-							txt.TextColor3 = Color3.fromRGB(255, 255, 255)
-							txt.TextStrokeTransparency = 0.3
-							txt.Font = Enum.Font.Montserrat
-							txt.TextSize = 12
-							txt.Parent = bg
-							bg.Parent = head
-							espGuis[plr] = {bg, txt}
-						end
-						local displayStr = ""
-						if Cfg.ESP_Names then displayStr = plr.Name end
-						if Cfg.ESP_Distance and lpRoot and root then
-							local dist = math.floor((lpRoot.Position - root.Position).Magnitude)
-							displayStr = displayStr .. (displayStr ~= "" and " | " or "") .. dist .. "m"
-						end
-						espGuis[plr][2].Text = displayStr
-						espGuis[plr][1].Parent = head
-					end
-				else
-					if espGuis[plr] then espGuis[plr][1]:Destroy() espGuis[plr] = nil end
-				end
-			else
-				if espHighlights[plr] then espHighlights[plr]:Destroy() espHighlights[plr] = nil end
-				if espGuis[plr] then espGuis[plr][1]:Destroy() espGuis[plr] = nil end
-			end
-		end
-	end
-end
-task.spawn(function() while task.wait(0.1) do updateESP() end end)
-Players.PlayerRemoving:Connect(function(plr)
-	if espHighlights[plr] then espHighlights[plr]:Destroy() espHighlights[plr] = nil end
-	if espGuis[plr] then espGuis[plr][1]:Destroy() espGuis[plr] = nil end
-end)
-
 -- // DELETE OLD GUI // --
 for _, v in pairs(guiParent:GetChildren()) do if v.Name == "OctaHubUI" then v:Destroy() end end
 
@@ -337,14 +257,15 @@ ScreenGui.Parent = guiParent
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 520, 0, 360)
-MainFrame.Position = UDim2.new(0.5, -260, 0.5, -180)
+MainFrame.Size = UDim2.new(0, 480, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -160)
 MainFrame.BackgroundColor3 = Theme.MainBG
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
-Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(40, 40, 50)
+Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(45, 45, 55)
+Instance.new("UIStroke", MainFrame).Thickness = 1.5
 
 -- Top Bar
 local TopBar = Instance.new("Frame")
@@ -352,14 +273,6 @@ TopBar.Size = UDim2.new(1, 0, 0, 35)
 TopBar.BackgroundColor3 = Theme.TopBG
 TopBar.BorderSizePixel = 0
 TopBar.Parent = MainFrame
-Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 8)
-
-local TopPatch = Instance.new("Frame")
-TopPatch.Size = UDim2.new(1, 0, 0.5, 0)
-TopPatch.Position = UDim2.new(0, 0, 0.5, 0)
-TopPatch.BackgroundColor3 = Theme.TopBG
-TopPatch.BorderSizePixel = 0
-TopPatch.Parent = TopBar
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(0, 200, 1, 0)
@@ -368,7 +281,7 @@ Title.BackgroundTransparency = 1
 Title.Text = "OCTA HUB"
 Title.TextColor3 = Theme.Accent
 Title.Font = Enum.Font.Montserrat
-Title.TextSize = 15
+Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TopBar
 
@@ -401,7 +314,7 @@ local SidebarLayout = Instance.new("UIListLayout")
 SidebarLayout.Padding = UDim.new(0, 5)
 SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 SidebarLayout.Parent = Sidebar
-Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 10)
+Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 15)
 
 -- // TAB SYSTEM // --
 local Tabs = {}
@@ -409,26 +322,19 @@ local activeTab = nil
 local function CreateTab(name)
 	local TabBtn = Instance.new("TextButton")
 	TabBtn.Size = UDim2.new(1, -20, 0, 30)
+	TabBtn.BackgroundColor3 = Theme.ElementBG
 	TabBtn.BackgroundTransparency = 1
 	TabBtn.Text = name
 	TabBtn.TextColor3 = Theme.SubText
 	TabBtn.Font = Enum.Font.Montserrat
-	TabBtn.TextSize = 13
+	TabBtn.TextSize = 12
 	TabBtn.Parent = Sidebar
-
-	local Marker = Instance.new("Frame")
-	Marker.Size = UDim2.new(0, 3, 0.6, 0)
-	Marker.Position = UDim2.new(0, -10, 0.2, 0)
-	Marker.BackgroundColor3 = Theme.Accent
-	Marker.BackgroundTransparency = 1
-	Marker.Parent = TabBtn
-	Instance.new("UICorner", Marker).CornerRadius = UDim.new(1, 0)
+	Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
 
 	local Scroll = Instance.new("ScrollingFrame")
 	Scroll.Size = UDim2.new(1, 0, 1, 0)
 	Scroll.BackgroundTransparency = 1
-	Scroll.ScrollBarThickness = 2
-	Scroll.ScrollBarImageColor3 = Theme.Accent
+	Scroll.ScrollBarThickness = 0
 	Scroll.Visible = false
 	Scroll.Parent = ContentArea
 
@@ -436,30 +342,29 @@ local function CreateTab(name)
 	Layout.Padding = UDim.new(0, 8)
 	Layout.Parent = Scroll
 	local Pad = Instance.new("UIPadding")
-	Pad.PaddingTop = UDim.new(0, 10)
+	Pad.PaddingTop = UDim.new(0, 15)
 	Pad.PaddingLeft = UDim.new(0, 15)
 	Pad.PaddingRight = UDim.new(0, 15)
 	Pad.Parent = Scroll
 
-	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 20) end)
+	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() 
+		Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 30) 
+	end)
 
 	TabBtn.MouseButton1Click:Connect(function()
 		if activeTab then
-			TweenService:Create(activeTab.Btn, TweenInfo.new(0.2), {TextColor3 = Theme.SubText}):Play()
-			TweenService:Create(activeTab.Marker, TweenInfo.new(0.2), {BackgroundTransparency = 1, Position = UDim2.new(0, -10, 0.2, 0)}):Play()
+			TweenService:Create(activeTab.Btn, TweenInfo.new(0.2), {TextColor3 = Theme.SubText, BackgroundTransparency = 1}):Play()
 			activeTab.Frame.Visible = false
 		end
-		activeTab = {Btn = TabBtn, Marker = Marker, Frame = Scroll}
-		TweenService:Create(TabBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
-		TweenService:Create(Marker, TweenInfo.new(0.2), {BackgroundTransparency = 0, Position = UDim2.new(0, 0, 0.2, 0)}):Play()
+		activeTab = {Btn = TabBtn, Frame = Scroll}
+		TweenService:Create(TabBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text, BackgroundTransparency = 0.5}):Play()
 		Scroll.Visible = true
 	end)
 
 	if not activeTab then
-		activeTab = {Btn = TabBtn, Marker = Marker, Frame = Scroll}
+		activeTab = {Btn = TabBtn, Frame = Scroll}
 		TabBtn.TextColor3 = Theme.Text
-		Marker.BackgroundTransparency = 0
-		Marker.Position = UDim2.new(0, 0, 0.2, 0)
+		TabBtn.BackgroundTransparency = 0.5
 		Scroll.Visible = true
 	end
 	return Scroll
@@ -601,13 +506,13 @@ local function CreateDropdown(parent, text, options, callback)
 	Lbl.Parent = Row
 
 	local Btn = Instance.new("TextButton")
-	Btn.Size = UDim2.new(0, 160, 0, 24)
-	Btn.Position = UDim2.new(1, -175, 0.5, -12)
+	Btn.Size = UDim2.new(0, 140, 0, 24)
+	Btn.Position = UDim2.new(1, -155, 0.5, -12)
 	Btn.BackgroundColor3 = Theme.MainBG
 	Btn.Text = options[1]
 	Btn.TextColor3 = Theme.Accent
 	Btn.Font = Enum.Font.Montserrat
-	Btn.TextSize = 10
+	Btn.TextSize = 11
 	Btn.AutoButtonColor = false
 	Btn.Parent = Row
 	Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
@@ -636,7 +541,7 @@ local function CreateButton(parent, text, callback)
 	Btn.Size = UDim2.new(1, 0, 0, 36)
 	Btn.BackgroundColor3 = Theme.Accent
 	Btn.Text = text
-	Btn.TextColor3 = Color3.fromRGB(20, 20, 25)
+	Btn.TextColor3 = Theme.MainBG
 	Btn.Font = Enum.Font.Montserrat
 	Btn.TextSize = 13
 	Btn.AutoButtonColor = false
@@ -652,8 +557,7 @@ local function CreateButton(parent, text, callback)
 end
 
 -- // POPULATING TABS // --
-local TabFarm = CreateTab("Auto Win")
-local TabVisuals = CreateTab("Visuals (ESP)")
+local TabFarm = CreateTab("Auto Farm")
 local TabMove = CreateTab("Movement")
 local TabChar = CreateTab("Player")
 local TabMisc = CreateTab("Misc")
@@ -711,19 +615,6 @@ CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
 	end
 end)
 
--- Visuals / ESP Tab
-CreateToggle(TabVisuals, "Enable Player Highlight", false, function(v) Cfg.ESP_Enabled = v end)
-CreateToggle(TabVisuals, "Show Player Names", false, function(v) Cfg.ESP_Names = v end)
-CreateToggle(TabVisuals, "Show Distance", false, function(v) Cfg.ESP_Distance = v end)
-CreateDropdown(TabVisuals, "Highlight Color", {"Green", "Cyan", "Red", "White", "Pink", "Yellow"}, function(v)
-	if v == "Red" then Cfg.ESP_Color = Color3.fromRGB(255, 50, 50)
-	elseif v == "Cyan" then Cfg.ESP_Color = Color3.fromRGB(0, 230, 255)
-	elseif v == "Green" then Cfg.ESP_Color = Color3.fromRGB(0, 255, 100)
-	elseif v == "White" then Cfg.ESP_Color = Color3.fromRGB(255, 255, 255)
-	elseif v == "Pink" then Cfg.ESP_Color = Color3.fromRGB(255, 100, 200)
-	elseif v == "Yellow" then Cfg.ESP_Color = Color3.fromRGB(255, 255, 50) end
-end)
-
 -- Movement Tab
 CreateToggle(TabMove, "Enable Fly (WASD)", false, function(v) Cfg.Fly = v if v then StartFly() else StopFly() end end)
 CreateSlider(TabMove, "Fly Speed", 10, 2000, 300, function(v) Cfg.FlySpeed = v end)
@@ -756,9 +647,6 @@ end)
 CreateButton(TabMisc, "Unload Hub", function()
 	Cfg.AutoWin = false
 	Cfg.InfiniteJump = false
-	Cfg.ESP_Enabled = false
-	Cfg.ESP_Names = false
-	Cfg.ESP_Distance = false
 	Cfg.AutoReconnect = false
 	if activeTween then activeTween:Cancel() end
 	StopFly()
@@ -795,7 +683,7 @@ MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	MinBtn.Text = minimized and "+" or "—"
 	TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-		Size = minimized and UDim2.new(0, 520, 0, 35) or UDim2.new(0, 520, 0, 360)
+		Size = minimized and UDim2.new(0, 480, 0, 35) or UDim2.new(0, 480, 0, 320)
 	}):Play()
 end)
 
@@ -816,4 +704,4 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-notify("Octa Hub", "Obstacle Destroyer Added!", 4)
+notify("Octa Hub", "Loaded Successfully!", 4)
