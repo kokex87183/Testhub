@@ -1,51 +1,104 @@
--- Essential Variables & Services
+-- Services & Core Setup
 local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
 local RegisterHit = Net:WaitForChild("RE/RegisterHit")
 
-_G.AutoFarm = true
-_G.FastAttack = true
-_G.AutoClick = true
+-- Global States
+_G.AutoFarm = false
+_G.FastAttack = false
+_G.AutoClick = false
 
--- Helper: Equip Selected Weapon
-local function EquipWeapon(weaponName)
-    local backpack = Player:FindFirstChild("Backpack")
-    if backpack and backpack:FindFirstChild(weaponName) then
-        Player.Character.Humanoid:EquipTool(backpack[weaponName])
+-- CREATE LIGHTWEIGHT UI
+local ScreenGui = Instance.new("ScreenGui", Player:WaitForChild("PlayerGui"))
+ScreenGui.Name = "MatsuneMini"
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Name = "MainFrame"
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.Size = UDim2.new(0, 200, 0, 185)
+MainFrame.Position = UDim2.new(0.4, 0, 0.4, 0)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true -- Native draggable functionality
+
+local UICorner = Instance.new("UICorner", MainFrame)
+UICorner.CornerRadius = UDim.new(0, 8)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.Text = "Matsune Mini"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+
+-- UI Toggle Creator Helper
+local function CreateToggle(name, position, globalVar)
+    local Button = Instance.new("TextButton", MainFrame)
+    Button.Size = UDim2.new(0, 180, 0, 35)
+    Button.Position = position
+    Button.BorderSizePixel = 0
+    Button.Font = Enum.Font.GothamMedium
+    Button.TextSize = 13
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    
+    local BtnCorner = Instance.new("UICorner", Button)
+    BtnCorner.CornerRadius = UDim.new(0, 6)
+    
+    local function updateVisuals()
+        if _G[globalVar] then
+            Button.BackgroundColor3 = Color3.fromRGB(46, 204, 113) -- Green
+            Button.Text = name .. ": ON"
+        else
+            Button.BackgroundColor3 = Color3.fromRGB(231, 76, 60) -- Red
+            Button.Text = name .. ": OFF"
+        end
     end
+    
+    updateVisuals()
+    Button.MouseButton1Click:Connect(function()
+        _G[globalVar] = not _G[globalVar]
+        updateVisuals()
+    end)
 end
 
--- Core: Fast Attack & Auto Click Logic [cite: 177, 187]
+-- Render the buttons
+CreateToggle("Auto Farm", UDim2.new(0, 10, 0, 45), "AutoFarm")
+CreateToggle("Fast Attack", UDim2.new(0, 10, 0, 90), "FastAttack")
+CreateToggle("Auto Click", UDim2.new(0, 10, 0, 135), "AutoClick")
+
+
+-- GAMEPLAY FUNCTIONALITY CODE
+
+-- Fast Attack Execution
 local FastAttack = { Distance = 100 }
-
-function FastAttack:Attack(targetHead, enemiesList)
-    if not targetHead or #enemiesList == 0 then return end
-    RegisterAttack:FireServer(0)
-    RegisterHit:FireServer(targetHead, enemiesList)
-end
-
 function FastAttack:Execute()
     local enemiesList = {}
     local mainTarget = nil
     
-    -- Process nearby enemies [cite: 179, 180]
-    for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-        local head = enemy:FindFirstChild("Head")
-        if head and enemy.Humanoid.Health > 0 and Player:DistanceFromCharacter(head.Position) < self.Distance then
-            table.insert(enemiesList, {enemy, head})
-            mainTarget = head
+    if workspace:FindFirstChild("Enemies") then
+        for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+            local head = enemy:FindFirstChild("Head")
+            if head and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and Player:DistanceFromCharacter(head.Position) < self.Distance then
+                table.insert(enemiesList, {enemy, head})
+                mainTarget = head
+            end
         end
     end
     
     if mainTarget then
-        self:Attack(mainTarget, enemiesList)
+        RegisterAttack:FireServer(0)
+        RegisterHit:FireServer(mainTarget, enemiesList)
     end
 end
 
--- Main Loop: Handles Auto Click and Fast Attack [cite: 187]
+-- Fast Attack & Auto Click Worker Loop
 task.spawn(function()
     while task.wait() do
         if _G.AutoClick and _G.FastAttack then
@@ -54,25 +107,35 @@ task.spawn(function()
     end
 end)
 
--- Core: Auto Farm Logic (Simplified) [cite: 22, 134]
+-- Auto Farm Worker Loop
 task.spawn(function()
     while task.wait() do
         if _G.AutoFarm then
             pcall(function()
-                for _, v in pairs(workspace.Enemies:GetChildren()) do
-                    if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                        repeat
-                            task.wait()
-                            EquipWeapon(_G.SelectWeapon or "Melee")
-                            
-                            -- Position player above enemy for safe farming [cite: 22, 31]
-                            if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-                                Player.Character.HumanoidRootPart.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 30, 0)
-                            end
-                            
-                            -- Trigger damage [cite: 22]
-                            game:GetService("VirtualUser"):Button1Down(Vector2.new(1280, 672))
-                        until not _G.AutoFarm or v.Humanoid.Health <= 0 or not v.Parent
+                if workspace:FindFirstChild("Enemies") then
+                    for _, v in pairs(workspace.Enemies:GetChildren()) do
+                        if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") then
+                            repeat
+                                task.wait()
+                                
+                                -- Auto Equip Tool from Inventory
+                                local backpack = Player:FindFirstChild("Backpack")
+                                if backpack then
+                                    local tool = backpack:FindFirstChildOfClass("Tool")
+                                    if tool then
+                                        Player.Character.Humanoid:EquipTool(tool)
+                                    end
+                                end
+                                
+                                -- Safely lock player position over target mob
+                                if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+                                    Player.Character.HumanoidRootPart.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 25, 0)
+                                end
+                                
+                                -- Trigger weapon input
+                                VirtualUser:Button1Down(Vector2.new(1280, 672))
+                            until not _G.AutoFarm or v.Humanoid.Health <= 0 or not v.Parent
+                        end
                     end
                 end
             end)
