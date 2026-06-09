@@ -1,707 +1,182 @@
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
-local GuiService = game:GetService("GuiService")
-local CoreGui = game:GetService("CoreGui")
+local lplr = game.Players.LocalPlayer
 
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-local guiParent = pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+local QuestData = loadstring(game:HttpGet("https://raw.githubusercontent.com/eixotic07/Bloxfruit/main/Autofarm%20Data.lua"))()
+local WalkTween = loadstring(game:HttpGet("https://raw.githubusercontent.com/eixotic07/Utils/main/Universal%20Tween.lua"))()
 
--- // EXACT SAFE PATH WAYPOINTS // --
-local SafePaths = {
-	["World 1"] = {
-		Vector3.new(2.81, 7.68, 129.98), Vector3.new(-0.48, 7.68, 284.92), Vector3.new(50.45, 7.68, 399.32),
-		Vector3.new(0.22, 7.68, 504.8), Vector3.new(-12.28, 7.68, 526.86), Vector3.new(-15.79, 7.68, 559.83),
-		Vector3.new(-16.23, 49.29, 677.16), Vector3.new(-15.94, 75.96, 757.34), Vector3.new(17.74, 75.96, 789.65),
-		Vector3.new(15.94, 75.96, 929.52), Vector3.new(3.16, 75.96, 1111.83), Vector3.new(4.08, 75.96, 1150.4),
-		Vector3.new(0.54, 75.96, 1365.5), Vector3.new(1.57, 75.96, 1414.83), Vector3.new(-126.49, 53.31, 1444.94),
-		Vector3.new(-433.16, 53.31, 1463.62), Vector3.new(-546.43, 53.32, 1463.7), Vector3.new(-712.52, 53.32, 1465.25),
-		Vector3.new(-1007.36, 53.32, 1466.5), Vector3.new(-1080.07, 53.32, 1468.84), Vector3.new(-1080.09, 322.48, 1468.84),
-		Vector3.new(-1122.78, 295.32, 1465.14), Vector3.new(-1244.95, 302.75, 1470.11), Vector3.new(-1858.42, 314.87, 1464.63),
-		Vector3.new(-2520.88, 321.59, 1464.34), Vector3.new(-2972.63, 295.32, 1465.91), Vector3.new(-3251.58, 295.32, 1468.47),
-		Vector3.new(-3732.62, 295.32, 1464.91), Vector3.new(-3943.55, 295.32, 1466.12), Vector3.new(-4123.24, 295.32, 1467.74),
-		Vector3.new(-4296.84, 295.32, 1471.44), Vector3.new(-4314.44, 472.78, 1528.26), Vector3.new(-4368.97, 469.83, 1530.54),
-		Vector3.new(-4584.82, 469.65, 1529.69), Vector3.new(-4628.37, 469.65, 1141.16), Vector3.new(-5046.67, 469.65, 1588.44),
-		Vector3.new(-5266.65, 469.65, 1477.57), Vector3.new(-5341.57, 469.43, 1477.3), Vector3.new(-5398.84, 469.43, 1459.22)
-	},
-	["World 2"] = {
-		Vector3.new(-397.34, 503.82, -117.26), Vector3.new(-394.85, 503.82, -48.88), Vector3.new(-396.17, 502.65, -6.19),
-		Vector3.new(-399.47, 502.91, 64.58), Vector3.new(-401.78, 502.91, 128.13), Vector3.new(-394.48, 498.99, 190.61),
-		Vector3.new(-399.82, 498.99, 267.71), Vector3.new(-400.21, 498.99, 341.16), Vector3.new(-400.58, 498.99, 412.84),
-		Vector3.new(-391.59, 498.85, 465.59), Vector3.new(-345.09, 498.85, 468.92), Vector3.new(-347.68, 525.92, 578.02),
-		Vector3.new(-455.16, 525.92, 576.05), Vector3.new(-454.9, 552.92, 463.35), Vector3.new(-347.07, 552.92, 464.38),
-		Vector3.new(-345.93, 579.99, 577.71), Vector3.new(-453.01, 579.99, 578.51), Vector3.new(-449.94, 606.99, 465.45),
-		Vector3.new(-398.96, 606.99, 467.96), Vector3.new(-399.56, 606.78, 615.39), Vector3.new(-400.07, 626.87, 748.33),
-		Vector3.new(-400.47, 606.34, 844.2), Vector3.new(-399.26, 606.34, 1050.49), Vector3.new(-400.15, 606.34, 1275.53),
-		Vector3.new(-390.74, 616.23, 1327.35), Vector3.new(-391.24, 606.34, 1454.43), Vector3.new(-361.57, 627.13, 1601.27),
-		Vector3.new(-359.82, 604.22, 1715.61), Vector3.new(-359.21, 614.4, 1787.58), Vector3.new(-397.93, 606.35, 1922.74),
-		Vector3.new(-396.77, 606.34, 2103.07), Vector3.new(-395.8, 606.34, 2247.85), Vector3.new(-395.34, 616.58, 2312.83),
-		Vector3.new(-400.62, 622.28, 2401.14), Vector3.new(-402.18, 622.24, 2521.79), Vector3.new(-403.84, 622.23, 2650.09),
-		Vector3.new(-398.01, 622.24, 2734.83), Vector3.new(-396.32, 622.24, 2854.44), Vector3.new(-399.09, 622.24, 2977.76),
-		Vector3.new(-402.67, 622.25, 3156.06), Vector3.new(-325.14, 622.25, 3338.71), Vector3.new(-210.07, 622.25, 3651.9),
-		Vector3.new(-100.59, 622.25, 3857.55), Vector3.new(-59.9, 624.76, 3881.49), Vector3.new(188.2, 622.41, 3863.21),
-		Vector3.new(544.92, 622.38, 3863.84), Vector3.new(595.68, 624.85, 3863.84)
-	}
-}
+-- No Cooldown
 
--- // CONFIGURATION STATE // --
-local Cfg = {
-	SelectedWorld = "World 1",
-	AutoWinSpeed  = 120, 
-	Fly           = false,
-	FlySpeed      = 300,
-	Noclip        = false,
-	WalkSpeed     = 16,
-	JumpPower     = 50,
-	InfiniteJump  = false,
-	AutoWin       = false,
-	AutoReconnect = false
-}
+local CombatFrameworkOld = require(lplr.PlayerScripts.CombatFramework) 
+require(game.ReplicatedStorage.Util.CameraShaker):Stop()
 
--- // NEW SLEEK THEME // --
-local Theme = {
-	MainBG = Color3.fromRGB(22, 22, 25),
-	SideBG = Color3.fromRGB(18, 18, 20),
-	TopBG  = Color3.fromRGB(15, 15, 17),
-	Accent = Color3.fromRGB(85, 170, 255), -- Nice modern cyan/blue
-	Text   = Color3.fromRGB(245, 245, 245),
-	SubText= Color3.fromRGB(140, 140, 150),
-	ElementBG = Color3.fromRGB(30, 30, 35)
-}
+local CombatFramework = debug.getupvalues(CombatFrameworkOld)[2]
+game:GetService("RunService").Stepped:Connect(function()
+    CombatFramework.activeController.attacking = false
+	CombatFramework.activeController.increment = 3
+	CombatFramework.activeController.blocking = false
+	CombatFramework.activeController.timeToNextBlock = 0
+	CombatFramework.activeController.timeToNextAttack = 0
+    CombatFramework.activeController.hitboxMagnitude = 54
+end)
 
--- // NOTIFICATION // --
-local function notify(title, text, time)
-	pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = title, Text = text, Duration = time or 3 }) end)
+-- in-game functions
+
+if game.PlaceId == 2753915549 then
+    World = 1
+elseif game.PlaceId == 4442272183 then
+    World = 2
+elseif game.PlaceId == 7449423635 then
+    World = 3
 end
 
--- // OBSTACLE DELETION LOGIC // --
-local function safeDestroy(parent, childName)
-	if parent then
-		local child = parent:FindFirstChild(childName)
-		if child then child:Destroy() end
-	end
+function StartQuest(Enemy)
+    Quest_Person, Quest_Data = QuestData.getQuest(Enemy)
+    
+    for i,v in pairs(Quest_Data) do
+        if i == "CFramePos" then
+            CFramePos = v
+        elseif typeof(v) == "CFrame" then
+            CFramePos = v
+        end
+    end
+
+    if (Vector3.new(CFramePos.X, CFramePos.Y, CFramePos.Z) - lplr.Character.HumanoidRootPart.Position).Magnitude >= 10000 and Quest_Data.Entrance then
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("requestEntrance", Quest_Data.Entrance)
+        task.wait(0.4)
+     else
+        task.wait(1)
+        WalkTween(lplr.Character.HumanoidRootPart, CFramePos, 300)
+        task.wait(0.4)
+        if (Vector3.new(CFramePos.X, CFramePos.Y, CFramePos.Z) - lplr.Character.HumanoidRootPart.Position).Magnitude <= 20 then
+            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("StartQuest", Quest_Data.QuestName, Quest_Data.LevelQuest)
+            task.wait(0.5)
+        end
+    end
 end
 
-local function deleteObstacles()
-	if Cfg.SelectedWorld == "World 1" then
-		local npcPiege = workspace:FindFirstChild("NPC & Piege")
-		if npcPiege then
-			safeDestroy(npcPiege, "Zone1")
-			safeDestroy(npcPiege, "CorridorTrap")
-			safeDestroy(npcPiege, "LavaTower")
-			safeDestroy(npcPiege, "NPC_Zone10")
-			safeDestroy(npcPiege, "NPC_Zone12")
-		end
-	elseif Cfg.SelectedWorld == "World 2" then
-		local w2 = workspace:FindFirstChild("WORLD 2")
-		if w2 then
-			local stage10 = w2:FindFirstChild("Stage10")
-			if stage10 then
-				safeDestroy(stage10, "DoorWall1")
-				safeDestroy(stage10, "DoorWall2")
-				safeDestroy(stage10, "DoorWall3")
-			end
-			for _, desc in pairs(w2:GetDescendants()) do
-				if desc.Name == "MovingWalls" or desc.Name == "Wind" or desc.Name == "Ventilateurs" then
-					desc:Destroy()
-				end
-			end
-		end
-		
-		local piegesLava = workspace:FindFirstChild("Pieges & Lava")
-		if piegesLava then
-			safeDestroy(piegesLava, "Lava_Stage3")
-			safeDestroy(piegesLava, "Twomps")
-			safeDestroy(piegesLava, "FanEffects")
-		end
-		
-		local npcPiege2 = workspace:FindFirstChild("NPC & Piege")
-		if npcPiege2 then
-			safeDestroy(npcPiege2, "NPC_Zone5")
-			safeDestroy(npcPiege2, "NPC_Zone9")
-		end
-		
-		local keycaps = workspace:FindFirstChild("Keycaps")
-		if keycaps then
-			local function disableBridge(bridgeName)
-				local b = keycaps:FindFirstChild(bridgeName)
-				if b then
-					local bridgePart = b:FindFirstChild("Bridge")
-					if bridgePart then safeDestroy(bridgePart, "TouchInterest") end
-				end
-			end
-			disableBridge("Stage10Bridge")
-			disableBridge("Stage10Bridge2")
-			disableBridge("Stage10Bridge3")
-		end
-		
-		task.spawn(function()
-			for i = 1, 10 do
-				task.wait(1)
-				local pL = workspace:FindFirstChild("Pieges & Lava")
-				if pL then safeDestroy(pL, "FanEffects") end
-				local w2_loop = workspace:FindFirstChild("WORLD 2")
-				if w2_loop then
-					for _, desc in pairs(w2_loop:GetDescendants()) do
-						if desc.Name == "Wind" or desc.Name == "Ventilateurs" then desc:Destroy() end
-					end
-				end
-			end
-		end)
-	end
-	notify("Octa Hub", "Obstacles deleted for " .. Cfg.SelectedWorld .. "!", 4)
+function UnEquipWeapon(Weapon)
+    if game.Players.LocalPlayer.Character:FindFirstChild(Weapon) then
+        game.Players.LocalPlayer.Character:FindFirstChild(Weapon).Parent = game.Players.LocalPlayer.Backpack
+    end
+end
+    
+function EquipWeapon(ToolSe)
+    if game.Players.LocalPlayer.Backpack:FindFirstChild(ToolSe) then
+        game.Players.LocalPlayer.Character.Humanoid:EquipTool(game.Players.LocalPlayer.Backpack:FindFirstChild(ToolSe))
+    end
 end
 
--- // SEQUENTIAL TWEEN LOGIC // --
-local activeTween = nil
-
-local function tweenToTarget(targetPos, speed)
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	
-	if not root or not hum or hum.Health <= 0 then return false end
-	
-	local dist = (root.Position - targetPos).Magnitude
-	if dist < 2 then return true end 
-	
-	local duration = dist / speed
-	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
-	activeTween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
-	
-	local completed = false
-	local connection
-	connection = activeTween.Completed:Connect(function() completed = true end)
-	
-	activeTween:Play()
-	
-	while not completed and Cfg.AutoWin and root.Parent and hum.Health > 0 do task.wait(0.05) end
-	
-	if connection then connection:Disconnect() end
-	if activeTween then activeTween:Cancel() activeTween = nil end
-	
-	return Cfg.AutoWin and root.Parent ~= nil and hum.Health > 0
+function Attack(Enemy)
+    if game:GetService("Players").LocalPlayer.PlayerGui.Main.Quest.Visible then
+        for i,v in pairs(game.Workspace.Enemies:GetChildren()) do
+            if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 and v.Name:find(Enemy) then
+                repeat task.wait()
+                    if (v.HumanoidRootPart.Position - lplr.Character.PrimaryPart.Position).Magnitude <= 54 then
+                        CombatFramework.activeController.hitboxMagnitude = 54
+                        game:GetService("VirtualUser"):CaptureController()
+                        game:GetService("VirtualUser"):Button1Down(Vector2.new(1000, 1000))
+                    end
+                    WalkTween(lplr.Character.HumanoidRootPart, CFrame.new(v.HumanoidRootPart.Position.X, v.HumanoidRootPart.Position.Y + 50, v.HumanoidRootPart.Position.Z), 400)
+                until not v.Parent or v.Humanoid.Health <= 0
+            else
+                for i,v in pairs(game.Workspace._WorldOrigin.EnemySpawns:GetChildren()) do
+                    if v.Name:find(Enemy) then
+                        WalkTween(lplr.Character.HumanoidRootPart, v.CFrame, 300) break
+                    end
+                end
+            end
+        end
+    else
+        StartQuest(Enemy)
+    end
 end
 
--- // AUTO RECONNECT LOGIC // --
-GuiService.ErrorMessageChanged:Connect(function()
-	if Cfg.AutoReconnect then
-		task.wait(0.5)
-		TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-	end
-end)
 
--- // CORE MOVEMENT LOGIC // --
-local FlyBV, FlyBG, FlyConn
-local function StartFly()
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if not root or not hum then return end
 
-	if FlyBV then FlyBV:Destroy() end
-	if FlyBG then FlyBG:Destroy() end
-	if FlyConn then FlyConn:Disconnect() end
 
-	hum.PlatformStand = true
-	FlyBG = Instance.new("BodyGyro")
-	FlyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-	FlyBG.P = 5e4
-	FlyBG.CFrame = root.CFrame
-	FlyBG.Parent = root
 
-	FlyBV = Instance.new("BodyVelocity")
-	FlyBV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-	FlyBV.Velocity = Vector3.zero
-	FlyBV.Parent = root
+local Meteor = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
 
-	FlyConn = RunService.RenderStepped:Connect(function()
-		if not Cfg.Fly then return end
-		local cam = Camera.CFrame
-		local spd = Cfg.FlySpeed
-		local vel = Vector3.zero
+local Bloxburg = Meteor:CreateWindow({
+    Name = "Meteor Lite : Bloxfruit",
+    LoadingTitle = "Meteor Lite",
+    LoadingSubtitle = "by eixotic07",
+    ConfigurationSaving = { Enabled = true, FolderName = "MeteorLite", FileName = "Bloxburg" }
+})
 
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cam.LookVector * spd end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cam.LookVector * spd end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cam.RightVector * spd end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.RightVector * spd end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.yAxis * spd end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.yAxis * spd end
+local Autofarm = Bloxburg:CreateTab("Autofarm")
 
-		FlyBV.Velocity = vel
-		FlyBG.CFrame = cam
-	end)
-end
+local SelectedQuest = {Quest = "", Enabled = false, AutoSelect = false, FirstSea = "", SecondSea = ""}
 
-local function StopFly()
-	Cfg.Fly = false
-	if FlyConn then FlyConn:Disconnect(); FlyConn = nil end
-	if FlyBV then FlyBV:Destroy(); FlyBV = nil end
-	if FlyBG then FlyBG:Destroy(); FlyBG = nil end
-	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-	if hum then hum.PlatformStand = false hum:ChangeState(Enum.HumanoidStateType.Running) end
-end
+table.insert(QuestData.FirstSea, "First Sea")
+table.insert(QuestData.SecondSea, "Second Sea")
+table.insert(QuestData.ThirdSea, "Third Sea")
 
--- // DELETE OLD GUI // --
-for _, v in pairs(guiParent:GetChildren()) do if v.Name == "OctaHubUI" then v:Destroy() end end
+FirstSeaD = Autofarm:CreateDropdown({
+    Name = "Quest : FirstSea",
+    Options = QuestData.FirstSea,
+    Flag = "Dropdown1",
+    CurrentOption = "First Sea",
+    Callback = function(Option)
+        SelectedQuest.Quest = Option
+    end,
+})
 
--- // UI SETUP // --
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OctaHubUI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = guiParent
+local SecondSeaD = Autofarm:CreateDropdown({
+    Name = "Quest : SecondSea",
+    Options = QuestData.SecondSea,
+    Flag = "Dropdown2",
+    CurrentOption = "Second Sea",
+    Callback = function(Option)
+        SelectedQuest.Quest = Option
+    end,
+})
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 480, 0, 320)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -160)
-MainFrame.BackgroundColor3 = Theme.MainBG
-MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true
-MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
-Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(45, 45, 55)
-Instance.new("UIStroke", MainFrame).Thickness = 1.5
+local ThirdSeaD = Autofarm:CreateDropdown({
+    Name = "Quest : ThirdSea",
+    Options = QuestData.ThirdSea,
+    Flag = "Dropdown3",
+    CurrentOption = "Third Sea",
+    Callback = function(Option)
+        SelectedQuest.Quest = Option
+    end,
+})
 
--- Top Bar
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 35)
-TopBar.BackgroundColor3 = Theme.TopBG
-TopBar.BorderSizePixel = 0
-TopBar.Parent = MainFrame
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(0, 200, 1, 0)
-Title.Position = UDim2.new(0, 15, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "OCTA HUB"
-Title.TextColor3 = Theme.Accent
-Title.Font = Enum.Font.Montserrat
-Title.TextSize = 14
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = TopBar
+Autofarm:CreateToggle({ Name = "Auto Select", CurrentValue = false, Flag = "Toggle2",
+    Callback = function(Value)
+        SelectedQuest.AutoSelect = Value
+        
+        while task.wait() do
+            if not SelectedQuest.AutoSelect then break end
 
-local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 25, 0, 25)
-MinBtn.Position = UDim2.new(1, -35, 0.5, -12)
-MinBtn.BackgroundColor3 = Theme.ElementBG
-MinBtn.Text = "—"
-MinBtn.TextColor3 = Theme.Text
-MinBtn.Font = Enum.Font.Montserrat
-MinBtn.TextSize = 14
-MinBtn.Parent = TopBar
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 4)
+            SelectedEnemy = QuestData.CalculateLevel(tonumber(game.Players.LocalPlayer.PlayerGui.Main.Level.Text:sub(5)))
 
--- Sidebar
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 130, 1, -35)
-Sidebar.Position = UDim2.new(0, 0, 0, 35)
-Sidebar.BackgroundColor3 = Theme.SideBG
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = MainFrame
+            for i,v in pairs(QuestData.Quests) do
+                if v.EnemyName == SelectedEnemy then
+                    if v.World == 1 and World == 1 then
+                        FirstSeaD:Set(v.EnemyName)
+                    elseif v.World == 2 and World == 2 then
+                        SecondSeaD:Set(v.EnemyName)
+                    elseif v.World == 3 and World == 3 then
+                        ThirdSeaD:Set(v.EnemyName)
+                    end
+                end
+            end
+            
+        end
+    end
+})
 
-local ContentArea = Instance.new("Frame")
-ContentArea.Size = UDim2.new(1, -130, 1, -35)
-ContentArea.Position = UDim2.new(0, 130, 0, 35)
-ContentArea.BackgroundTransparency = 1
-ContentArea.Parent = MainFrame
+Autofarm:CreateSection("Quest Autofarm")
 
-local SidebarLayout = Instance.new("UIListLayout")
-SidebarLayout.Padding = UDim.new(0, 5)
-SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-SidebarLayout.Parent = Sidebar
-Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 15)
+Autofarm:CreateToggle({ Name = "Quest Autofarm", CurrentValue = false, Flag = "Toggle1",
+    Callback = function(Value)
+        SelectedQuest.Enabled = Value
 
--- // TAB SYSTEM // --
-local Tabs = {}
-local activeTab = nil
-local function CreateTab(name)
-	local TabBtn = Instance.new("TextButton")
-	TabBtn.Size = UDim2.new(1, -20, 0, 30)
-	TabBtn.BackgroundColor3 = Theme.ElementBG
-	TabBtn.BackgroundTransparency = 1
-	TabBtn.Text = name
-	TabBtn.TextColor3 = Theme.SubText
-	TabBtn.Font = Enum.Font.Montserrat
-	TabBtn.TextSize = 12
-	TabBtn.Parent = Sidebar
-	Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
+        while task.wait() do
+            if not SelectedQuest.Enabled then break end
 
-	local Scroll = Instance.new("ScrollingFrame")
-	Scroll.Size = UDim2.new(1, 0, 1, 0)
-	Scroll.BackgroundTransparency = 1
-	Scroll.ScrollBarThickness = 0
-	Scroll.Visible = false
-	Scroll.Parent = ContentArea
-
-	local Layout = Instance.new("UIListLayout")
-	Layout.Padding = UDim.new(0, 8)
-	Layout.Parent = Scroll
-	local Pad = Instance.new("UIPadding")
-	Pad.PaddingTop = UDim.new(0, 15)
-	Pad.PaddingLeft = UDim.new(0, 15)
-	Pad.PaddingRight = UDim.new(0, 15)
-	Pad.Parent = Scroll
-
-	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() 
-		Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 30) 
-	end)
-
-	TabBtn.MouseButton1Click:Connect(function()
-		if activeTab then
-			TweenService:Create(activeTab.Btn, TweenInfo.new(0.2), {TextColor3 = Theme.SubText, BackgroundTransparency = 1}):Play()
-			activeTab.Frame.Visible = false
-		end
-		activeTab = {Btn = TabBtn, Frame = Scroll}
-		TweenService:Create(TabBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text, BackgroundTransparency = 0.5}):Play()
-		Scroll.Visible = true
-	end)
-
-	if not activeTab then
-		activeTab = {Btn = TabBtn, Frame = Scroll}
-		TabBtn.TextColor3 = Theme.Text
-		TabBtn.BackgroundTransparency = 0.5
-		Scroll.Visible = true
-	end
-	return Scroll
-end
-
--- // COMPONENT BUILDERS // --
-local function CreateToggle(parent, text, defaultVal, callback)
-	local Row = Instance.new("Frame")
-	Row.Size = UDim2.new(1, 0, 0, 36)
-	Row.BackgroundColor3 = Theme.ElementBG
-	Row.Parent = parent
-	Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 6)
-
-	local Lbl = Instance.new("TextLabel")
-	Lbl.Size = UDim2.new(1, -60, 1, 0)
-	Lbl.Position = UDim2.new(0, 15, 0, 0)
-	Lbl.BackgroundTransparency = 1
-	Lbl.Text = text
-	Lbl.TextColor3 = Theme.Text
-	Lbl.Font = Enum.Font.Montserrat
-	Lbl.TextSize = 12
-	Lbl.TextXAlignment = Enum.TextXAlignment.Left
-	Lbl.Parent = Row
-
-	local Box = Instance.new("Frame")
-	Box.Size = UDim2.new(0, 20, 0, 20)
-	Box.Position = UDim2.new(1, -35, 0.5, -10)
-	Box.BackgroundColor3 = Theme.MainBG
-	Box.Parent = Row
-	Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
-	local BoxStroke = Instance.new("UIStroke")
-	BoxStroke.Color = defaultVal and Theme.Accent or Theme.SubText
-	BoxStroke.Thickness = 1
-	BoxStroke.Parent = Box
-
-	local Check = Instance.new("Frame")
-	Check.Size = defaultVal and UDim2.new(1, -8, 1, -8) or UDim2.new(0, 0, 0, 0)
-	Check.Position = UDim2.new(0.5, 0, 0.5, 0)
-	Check.BackgroundColor3 = Theme.Accent
-	Check.AnchorPoint = Vector2.new(0.5, 0.5)
-	Check.Parent = Box
-	Instance.new("UICorner", Check).CornerRadius = UDim.new(0, 3)
-
-	local Btn = Instance.new("TextButton")
-	Btn.Size = UDim2.new(1, 0, 1, 0)
-	Btn.BackgroundTransparency = 1
-	Btn.Text = ""
-	Btn.Parent = Row
-
-	local active = defaultVal
-	Btn.MouseButton1Click:Connect(function()
-		active = not active
-		if active then
-			TweenService:Create(BoxStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-			TweenService:Create(Check, TweenInfo.new(0.2), {Size = UDim2.new(1, -8, 1, -8)}):Play()
-		else
-			TweenService:Create(BoxStroke, TweenInfo.new(0.2), {Color = Theme.SubText}):Play()
-			TweenService:Create(Check, TweenInfo.new(0.2), {Size = UDim2.new(0, 0, 0, 0)}):Play()
-		end
-		callback(active)
-	end)
-end
-
-local function CreateSlider(parent, text, min, max, def, callback)
-	local Row = Instance.new("Frame")
-	Row.Size = UDim2.new(1, 0, 0, 50)
-	Row.BackgroundColor3 = Theme.ElementBG
-	Row.Parent = parent
-	Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 6)
-
-	local Lbl = Instance.new("TextLabel")
-	Lbl.Size = UDim2.new(1, -50, 0, 20)
-	Lbl.Position = UDim2.new(0, 15, 0, 6)
-	Lbl.BackgroundTransparency = 1
-	Lbl.Text = text
-	Lbl.TextColor3 = Theme.Text
-	Lbl.Font = Enum.Font.Montserrat
-	Lbl.TextSize = 12
-	Lbl.TextXAlignment = Enum.TextXAlignment.Left
-	Lbl.Parent = Row
-
-	local ValLbl = Instance.new("TextLabel")
-	ValLbl.Size = UDim2.new(0, 40, 0, 20)
-	ValLbl.Position = UDim2.new(1, -50, 0, 6)
-	ValLbl.BackgroundTransparency = 1
-	ValLbl.Text = tostring(def)
-	ValLbl.TextColor3 = Theme.Accent
-	ValLbl.Font = Enum.Font.Montserrat
-	ValLbl.TextSize = 12
-	ValLbl.TextXAlignment = Enum.TextXAlignment.Right
-	ValLbl.Parent = Row
-
-	local Track = Instance.new("TextButton")
-	Track.Size = UDim2.new(1, -30, 0, 6)
-	Track.Position = UDim2.new(0, 15, 1, -16)
-	Track.BackgroundColor3 = Theme.MainBG
-	Track.Text = ""
-	Track.AutoButtonColor = false
-	Track.Parent = Row
-	Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
-
-	local Fill = Instance.new("Frame")
-	local pct = (def - min) / (max - min)
-	Fill.Size = UDim2.new(pct, 0, 1, 0)
-	Fill.BackgroundColor3 = Theme.Accent
-	Fill.Parent = Track
-	Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
-
-	local dragging = false
-	local function update(input)
-		local pos = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
-		Fill.Size = UDim2.new(pos, 0, 1, 0)
-		local val = math.floor(min + ((max - min) * pos))
-		ValLbl.Text = tostring(val)
-		callback(val)
-	end
-
-	Track.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true update(input) end end)
-	UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end end)
-	UserInputService.InputChanged:Connect(function(input) if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then update(input) end end)
-end
-
-local function CreateDropdown(parent, text, options, callback)
-	local Row = Instance.new("Frame")
-	Row.Size = UDim2.new(1, 0, 0, 36)
-	Row.BackgroundColor3 = Theme.ElementBG
-	Row.Parent = parent
-	Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 6)
-
-	local Lbl = Instance.new("TextLabel")
-	Lbl.Size = UDim2.new(0.4, 0, 1, 0)
-	Lbl.Position = UDim2.new(0, 15, 0, 0)
-	Lbl.BackgroundTransparency = 1
-	Lbl.Text = text
-	Lbl.TextColor3 = Theme.Text
-	Lbl.Font = Enum.Font.Montserrat
-	Lbl.TextSize = 12
-	Lbl.TextXAlignment = Enum.TextXAlignment.Left
-	Lbl.Parent = Row
-
-	local Btn = Instance.new("TextButton")
-	Btn.Size = UDim2.new(0, 140, 0, 24)
-	Btn.Position = UDim2.new(1, -155, 0.5, -12)
-	Btn.BackgroundColor3 = Theme.MainBG
-	Btn.Text = options[1]
-	Btn.TextColor3 = Theme.Accent
-	Btn.Font = Enum.Font.Montserrat
-	Btn.TextSize = 11
-	Btn.AutoButtonColor = false
-	Btn.Parent = Row
-	Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
-	local btnStroke = Instance.new("UIStroke")
-	btnStroke.Color = Theme.SubText
-	btnStroke.Thickness = 1
-	btnStroke.Parent = Btn
-
-	local obj = {}
-	local currentOptions = options
-	local idx = 1
-
-	Btn.MouseButton1Click:Connect(function()
-		idx = (idx % #currentOptions) + 1
-		Btn.Text = currentOptions[idx]
-		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.SideBG}):Play()
-		task.wait(0.1)
-		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.MainBG}):Play()
-		callback(currentOptions[idx])
-	end)
-	return obj
-end
-
-local function CreateButton(parent, text, callback)
-	local Btn = Instance.new("TextButton")
-	Btn.Size = UDim2.new(1, 0, 0, 36)
-	Btn.BackgroundColor3 = Theme.Accent
-	Btn.Text = text
-	Btn.TextColor3 = Theme.MainBG
-	Btn.Font = Enum.Font.Montserrat
-	Btn.TextSize = 13
-	Btn.AutoButtonColor = false
-	Btn.Parent = parent
-	Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
-
-	Btn.MouseButton1Click:Connect(function()
-		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundTransparency = 0.3}):Play()
-		task.wait(0.1)
-		TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundTransparency = 0}):Play()
-		callback()
-	end)
-end
-
--- // POPULATING TABS // --
-local TabFarm = CreateTab("Auto Farm")
-local TabMove = CreateTab("Movement")
-local TabChar = CreateTab("Player")
-local TabMisc = CreateTab("Misc")
-
--- Auto Farm Tab
-CreateDropdown(TabFarm, "Select World", {"World 1", "World 2"}, function(v) Cfg.SelectedWorld = v end)
-CreateButton(TabFarm, "Delete Obstacles", deleteObstacles)
-CreateSlider(TabFarm, "Smooth Tween Speed", 30, 200, 120, function(v) Cfg.AutoWinSpeed = v end)
-
-CreateToggle(TabFarm, "Enable Node Safe-Pathing", false, function(v)
-	Cfg.AutoWin = v
-	if v then
-		task.spawn(function()
-			while Cfg.AutoWin do
-				local char = LocalPlayer.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				
-				if char and root and hum and hum.Health > 0 then
-					Cfg.Noclip = true 
-					local safePathNodes = SafePaths[Cfg.SelectedWorld]
-					local finishedCourse = true
-					
-					for _, targetPos in ipairs(safePathNodes) do
-						if not Cfg.AutoWin then 
-							finishedCourse = false 
-							break 
-						end
-						
-						local success = tweenToTarget(targetPos, Cfg.AutoWinSpeed)
-						if not success then 
-							finishedCourse = false 
-							break 
-						end 
-						
-						task.wait(0.01) 
-					end
-					
-					Cfg.Noclip = false
-					
-					if Cfg.AutoWin and finishedCourse then
-						notify("Octa Hub", "Course Completed! Resetting...", 3)
-						task.wait(0.5)
-						if hum then hum.Health = 0 end
-						task.wait(3) 
-					elseif not finishedCourse and Cfg.AutoWin then
-						notify("Octa Hub", "Died! Resetting path progress...", 2)
-						task.wait(2)
-					end
-				else
-					task.wait(1)
-				end
-			end
-		end)
-	end
-end)
-
--- Movement Tab
-CreateToggle(TabMove, "Enable Fly (WASD)", false, function(v) Cfg.Fly = v if v then StartFly() else StopFly() end end)
-CreateSlider(TabMove, "Fly Speed", 10, 2000, 300, function(v) Cfg.FlySpeed = v end)
-CreateToggle(TabMove, "Enable Noclip", false, function(v) Cfg.Noclip = v end)
-
--- Player Tab
-CreateSlider(TabChar, "Walk Speed", 16, 500, 16, function(v)
-	Cfg.WalkSpeed = v
-	local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-	if h then h.WalkSpeed = v end
-end)
-CreateSlider(TabChar, "Jump Power", 50, 500, 50, function(v)
-	Cfg.JumpPower = v
-	local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-	if h then h.UseJumpPower = true h.JumpPower = v end
-end)
-CreateToggle(TabChar, "Infinite Jump", false, function(v) Cfg.InfiniteJump = v end)
-
--- Misc Tab
-CreateToggle(TabMisc, "Auto Reconnect (Anti-Kick)", false, function(v) Cfg.AutoReconnect = v end)
-CreateButton(TabMisc, "Enable Anti-AFK", function()
-	local vu = game:GetService("VirtualUser")
-	LocalPlayer.Idled:Connect(function()
-		vu:Button2Down(Vector2.new(0, 0), Camera.CFrame)
-		task.wait(1)
-		vu:Button2Up(Vector2.new(0, 0), Camera.CFrame)
-	end)
-	notify("Octa Hub", "Anti-AFK Activated", 3)
-end)
-CreateButton(TabMisc, "Unload Hub", function()
-	Cfg.AutoWin = false
-	Cfg.InfiniteJump = false
-	Cfg.AutoReconnect = false
-	if activeTween then activeTween:Cancel() end
-	StopFly()
-	ScreenGui:Destroy()
-end)
-
--- // GLOBAL EVENT LOGIC // --
-RunService.Stepped:Connect(function()
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	
-	if Cfg.Noclip then
-		for _, part in pairs(char:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = false end
-		end
-	end
-
-	if hum and Cfg.WalkSpeed ~= 16 then
-		hum.WalkSpeed = Cfg.WalkSpeed
-	end
-end)
-
-UserInputService.JumpRequest:Connect(function()
-	if Cfg.InfiniteJump then
-		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-		if hum then hum:ChangeState("Jumping") end
-	end
-end)
-
--- // WINDOW DRAGGING & MINIMIZE LOGIC // --
-local minimized = false
-MinBtn.MouseButton1Click:Connect(function()
-	minimized = not minimized
-	MinBtn.Text = minimized and "+" or "—"
-	TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-		Size = minimized and UDim2.new(0, 480, 0, 35) or UDim2.new(0, 480, 0, 320)
-	}):Play()
-end)
-
-local dragging, dragInput, dragStart, startPos
-TopBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true dragStart = input.Position startPos = MainFrame.Position
-		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
-	end
-end)
-TopBar.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-end)
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		local delta = input.Position - dragStart
-		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
-end)
-
-notify("Octa Hub", "Loaded Successfully!", 4)
+            Attack(SelectedQuest.Quest)
+        end
+    end
+})
