@@ -1,25 +1,31 @@
 local lplr = game.Players.LocalPlayer
 
+-- Load Dependencies
 local QuestData = loadstring(game:HttpGet("https://raw.githubusercontent.com/eixotic07/Bloxfruit/main/Autofarm%20Data.lua"))()
 local WalkTween = loadstring(game:HttpGet("https://raw.githubusercontent.com/eixotic07/Utils/main/Universal%20Tween.lua"))()
 
--- No Cooldown
-
-local CombatFrameworkOld = require(lplr.PlayerScripts.CombatFramework) 
+-- Combat Framework / No Cooldown (FIXED: Added pcall and equipped check so it doesn't crash)
+local CombatFrameworkOld = require(lplr.PlayerScripts:WaitForChild("CombatFramework")) 
 require(game.ReplicatedStorage.Util.CameraShaker):Stop()
 
-local CombatFramework = debug.getupvalues(CombatFrameworkOld)[2]
+local debug_getup = getupvalues or debug.getupvalues
+local CombatFramework = debug_getup(CombatFrameworkOld)[2]
+
 game:GetService("RunService").Stepped:Connect(function()
-    CombatFramework.activeController.attacking = false
-	CombatFramework.activeController.increment = 3
-	CombatFramework.activeController.blocking = false
-	CombatFramework.activeController.timeToNextBlock = 0
-	CombatFramework.activeController.timeToNextAttack = 0
-    CombatFramework.activeController.hitboxMagnitude = 54
+    pcall(function()
+        if CombatFramework and CombatFramework.activeController and CombatFramework.activeController.equipped then
+            CombatFramework.activeController.attacking = false
+            CombatFramework.activeController.increment = 3
+            CombatFramework.activeController.blocking = false
+            CombatFramework.activeController.timeToNextBlock = 0
+            CombatFramework.activeController.timeToNextAttack = 0
+            CombatFramework.activeController.hitboxMagnitude = 54
+        end
+    end)
 end)
 
 -- in-game functions
-
+local World = 1
 if game.PlaceId == 2753915549 then
     World = 1
 elseif game.PlaceId == 4442272183 then
@@ -29,7 +35,8 @@ elseif game.PlaceId == 7449423635 then
 end
 
 function StartQuest(Enemy)
-    Quest_Person, Quest_Data = QuestData.getQuest(Enemy)
+    local Quest_Person, Quest_Data = QuestData.getQuest(Enemy)
+    local CFramePos
     
     for i,v in pairs(Quest_Data) do
         if i == "CFramePos" then
@@ -38,6 +45,8 @@ function StartQuest(Enemy)
             CFramePos = v
         end
     end
+
+    if not lplr.Character or not lplr.Character:FindFirstChild("HumanoidRootPart") then return end
 
     if (Vector3.new(CFramePos.X, CFramePos.Y, CFramePos.Z) - lplr.Character.HumanoidRootPart.Position).Magnitude >= 10000 and Quest_Data.Entrance then
         game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("requestEntrance", Quest_Data.Entrance)
@@ -54,32 +63,35 @@ function StartQuest(Enemy)
 end
 
 function UnEquipWeapon(Weapon)
-    if game.Players.LocalPlayer.Character:FindFirstChild(Weapon) then
-        game.Players.LocalPlayer.Character:FindFirstChild(Weapon).Parent = game.Players.LocalPlayer.Backpack
+    if lplr.Character and lplr.Character:FindFirstChild(Weapon) then
+        lplr.Character:FindFirstChild(Weapon).Parent = lplr.Backpack
     end
 end
     
 function EquipWeapon(ToolSe)
-    if game.Players.LocalPlayer.Backpack:FindFirstChild(ToolSe) then
-        game.Players.LocalPlayer.Character.Humanoid:EquipTool(game.Players.LocalPlayer.Backpack:FindFirstChild(ToolSe))
+    if lplr.Backpack:FindFirstChild(ToolSe) and lplr.Character then
+        lplr.Character.Humanoid:EquipTool(lplr.Backpack:FindFirstChild(ToolSe))
     end
 end
 
 function Attack(Enemy)
-    if game:GetService("Players").LocalPlayer.PlayerGui.Main.Quest.Visible then
+    local mainGui = lplr.PlayerGui:FindFirstChild("Main")
+    if mainGui and mainGui.Quest.Visible then
         for i,v in pairs(game.Workspace.Enemies:GetChildren()) do
             if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 and v.Name:find(Enemy) then
                 repeat task.wait()
+                    if not lplr.Character or not lplr.Character:FindFirstChild("PrimaryPart") then break end
+                    
                     if (v.HumanoidRootPart.Position - lplr.Character.PrimaryPart.Position).Magnitude <= 54 then
-                        CombatFramework.activeController.hitboxMagnitude = 54
+                        pcall(function() CombatFramework.activeController.hitboxMagnitude = 54 end)
                         game:GetService("VirtualUser"):CaptureController()
                         game:GetService("VirtualUser"):Button1Down(Vector2.new(1000, 1000))
                     end
                     WalkTween(lplr.Character.HumanoidRootPart, CFrame.new(v.HumanoidRootPart.Position.X, v.HumanoidRootPart.Position.Y + 50, v.HumanoidRootPart.Position.Z), 400)
-                until not v.Parent or v.Humanoid.Health <= 0
+                until not v.Parent or v.Humanoid.Health <= 0 or not SelectedQuest.Enabled
             else
                 for i,v in pairs(game.Workspace._WorldOrigin.EnemySpawns:GetChildren()) do
-                    if v.Name:find(Enemy) then
+                    if v.Name:find(Enemy) and lplr.Character and lplr.Character:FindFirstChild("HumanoidRootPart") then
                         WalkTween(lplr.Character.HumanoidRootPart, v.CFrame, 300) break
                     end
                 end
@@ -91,10 +103,8 @@ function Attack(Enemy)
 end
 
 
-
-
-
-local Meteor = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
+-- UI LIBRARY (FIXED: Replaced dead shlexware link with the live siriussoftware link)
+local Meteor = loadstring(game:HttpGet('https://raw.githubusercontent.com/siriussoftware/Rayfield/main/source.lua'))()
 
 local Bloxburg = Meteor:CreateWindow({
     Name = "Meteor Lite : Bloxfruit",
@@ -111,13 +121,13 @@ table.insert(QuestData.FirstSea, "First Sea")
 table.insert(QuestData.SecondSea, "Second Sea")
 table.insert(QuestData.ThirdSea, "Third Sea")
 
-FirstSeaD = Autofarm:CreateDropdown({
+local FirstSeaD = Autofarm:CreateDropdown({
     Name = "Quest : FirstSea",
     Options = QuestData.FirstSea,
     Flag = "Dropdown1",
-    CurrentOption = "First Sea",
+    CurrentOption = {"First Sea"},
     Callback = function(Option)
-        SelectedQuest.Quest = Option
+        SelectedQuest.Quest = Option[1] or Option
     end,
 })
 
@@ -125,9 +135,9 @@ local SecondSeaD = Autofarm:CreateDropdown({
     Name = "Quest : SecondSea",
     Options = QuestData.SecondSea,
     Flag = "Dropdown2",
-    CurrentOption = "Second Sea",
+    CurrentOption = {"Second Sea"},
     Callback = function(Option)
-        SelectedQuest.Quest = Option
+        SelectedQuest.Quest = Option[1] or Option
     end,
 })
 
@@ -135,48 +145,60 @@ local ThirdSeaD = Autofarm:CreateDropdown({
     Name = "Quest : ThirdSea",
     Options = QuestData.ThirdSea,
     Flag = "Dropdown3",
-    CurrentOption = "Third Sea",
+    CurrentOption = {"Third Sea"},
     Callback = function(Option)
-        SelectedQuest.Quest = Option
+        SelectedQuest.Quest = Option[1] or Option
     end,
 })
 
-
-Autofarm:CreateToggle({ Name = "Auto Select", CurrentValue = false, Flag = "Toggle2",
+Autofarm:CreateToggle({ 
+    Name = "Auto Select", 
+    CurrentValue = false, 
+    Flag = "Toggle2",
     Callback = function(Value)
         SelectedQuest.AutoSelect = Value
         
-        while task.wait() do
-            if not SelectedQuest.AutoSelect then break end
+        task.spawn(function()
+            while SelectedQuest.AutoSelect do
+                task.wait(1)
+                pcall(function()
+                    -- FIXED: Safer way to grab the player's level instead of reading the GUI text
+                    local currentLevel = lplr.Data.Level.Value
+                    local SelectedEnemy = QuestData.CalculateLevel(currentLevel)
 
-            SelectedEnemy = QuestData.CalculateLevel(tonumber(game.Players.LocalPlayer.PlayerGui.Main.Level.Text:sub(5)))
-
-            for i,v in pairs(QuestData.Quests) do
-                if v.EnemyName == SelectedEnemy then
-                    if v.World == 1 and World == 1 then
-                        FirstSeaD:Set(v.EnemyName)
-                    elseif v.World == 2 and World == 2 then
-                        SecondSeaD:Set(v.EnemyName)
-                    elseif v.World == 3 and World == 3 then
-                        ThirdSeaD:Set(v.EnemyName)
+                    for i,v in pairs(QuestData.Quests) do
+                        if v.EnemyName == SelectedEnemy then
+                            if v.World == 1 and World == 1 then
+                                FirstSeaD:Set({v.EnemyName})
+                            elseif v.World == 2 and World == 2 then
+                                SecondSeaD:Set({v.EnemyName})
+                            elseif v.World == 3 and World == 3 then
+                                ThirdSeaD:Set({v.EnemyName})
+                            end
+                        end
                     end
-                end
+                end)
             end
-            
-        end
+        end)
     end
 })
 
 Autofarm:CreateSection("Quest Autofarm")
 
-Autofarm:CreateToggle({ Name = "Quest Autofarm", CurrentValue = false, Flag = "Toggle1",
+Autofarm:CreateToggle({ 
+    Name = "Quest Autofarm", 
+    CurrentValue = false, 
+    Flag = "Toggle1",
     Callback = function(Value)
         SelectedQuest.Enabled = Value
 
-        while task.wait() do
-            if not SelectedQuest.Enabled then break end
-
-            Attack(SelectedQuest.Quest)
-        end
+        task.spawn(function()
+            while SelectedQuest.Enabled do
+                task.wait()
+                pcall(function()
+                    Attack(SelectedQuest.Quest)
+                end)
+            end
+        end)
     end
 })
