@@ -369,9 +369,27 @@ FOVSection:Slider({ Title = "FOV Radius", Step = 5, Value = { Min = 30, Max = 60
 local ConfigSection = SettingsTab:Section({ Title = "Config System", Opened = true })
 local BunnyConfig = Window.ConfigManager:CreateConfig("bunnyhub_config")
 BunnyConfig:Register(Window)
-ConfigSection:Button({ Title = "Save Config", Callback = function() BunnyConfig:Save(); Notify("Config", "Saved!") end })
-ConfigSection:Button({ Title = "Load Config", Callback = function() BunnyConfig:Load(); Notify("Config", "Loaded!") end })
 
+ConfigSection:Button({ 
+    Title = "Save Config", 
+    Callback = function() BunnyConfig:Save(); Notify("Config", "Saved!") end 
+})
+ConfigSection:Button({ 
+    Title = "Load Config", 
+    Callback = function() BunnyConfig:Load(); Notify("Config", "Loaded!") end 
+})
+ConfigSection:Button({ 
+    Title = "Reset Config", 
+    Callback = function() 
+        pcall(function()
+            if delfile then
+                delfile("BunnyHub/bunnyhub_config.txt")
+                delfile("BunnyHub/bunnyhub_config.json")
+            end
+        end)
+        Notify("Config", "Config reset! Re-execute script to apply defaults.") 
+    end 
+})
 
 -- ============================================================
 --  DRAWING OBJECTS & ESP LOGIC
@@ -703,7 +721,7 @@ local function BunnyGlowNotification()
         
         local stroke = Instance.new("UIStroke", frame)
         stroke.Color = Color3.fromRGB(0, 170, 255)
-        stroke.Thickness = 2.5
+        stroke.Thickness = 1.2 -- Thinner Blue Light
         stroke.Transparency = 0.1
         
         -- Custom Image Logo
@@ -711,7 +729,7 @@ local function BunnyGlowNotification()
         logo.Size = UDim2.new(0, 30, 0, 30)
         logo.Position = UDim2.new(0, 12, 0.5, -15)
         logo.BackgroundTransparency = 1
-        logo.Image = "rbxassetid://93890494180555"
+        logo.Image = "rbxassetid://93880685309116" -- Your New Updated Logo
         
         local textLabel = Instance.new("TextLabel", frame)
         textLabel.Size = UDim2.new(1, -55, 1, 0)
