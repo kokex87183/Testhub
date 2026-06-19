@@ -214,10 +214,10 @@ local Window = WindUI:CreateWindow({
     Title       = "Bunny Hub",
     Author      = "by rhoscript",
     Folder      = "BunnyHub",
-    Size        = UDim2.fromOffset(680, 620), 
+    Size        = UDim2.fromOffset(680, 620), -- Increased size for Mobile Users
     Theme       = "Dark",
     Resizable   = true,
-    Transparent = true, 
+    Transparent = true, -- Transparent Background!
 })
 
 Window:SetToggleKey(Enum.KeyCode.K)
@@ -369,27 +369,9 @@ FOVSection:Slider({ Title = "FOV Radius", Step = 5, Value = { Min = 30, Max = 60
 local ConfigSection = SettingsTab:Section({ Title = "Config System", Opened = true })
 local BunnyConfig = Window.ConfigManager:CreateConfig("bunnyhub_config")
 BunnyConfig:Register(Window)
+ConfigSection:Button({ Title = "Save Config", Callback = function() BunnyConfig:Save(); Notify("Config", "Saved!") end })
+ConfigSection:Button({ Title = "Load Config", Callback = function() BunnyConfig:Load(); Notify("Config", "Loaded!") end })
 
-ConfigSection:Button({ 
-    Title = "Save Config", 
-    Callback = function() BunnyConfig:Save(); Notify("Config", "Saved!") end 
-})
-ConfigSection:Button({ 
-    Title = "Load Config", 
-    Callback = function() BunnyConfig:Load(); Notify("Config", "Loaded!") end 
-})
-ConfigSection:Button({ 
-    Title = "Reset Config", 
-    Callback = function() 
-        pcall(function()
-            if delfile then
-                delfile("BunnyHub/bunnyhub_config.txt")
-                delfile("BunnyHub/bunnyhub_config.json")
-            end
-        end)
-        Notify("Config", "Config reset! Re-execute script to apply defaults.") 
-    end 
-})
 
 -- ============================================================
 --  DRAWING OBJECTS & ESP LOGIC
@@ -695,13 +677,14 @@ end)
 
 
 -- ============================================================
---  CUSTOM NOTIFICATION (WITH LOGO & SLIDING FROM RIGHT)
+--  CUSTOM BOTTOM-LEFT NEON GLOW NOTIFICATION
 -- ============================================================
 local function BunnyGlowNotification()
     pcall(function()
         local sg = Instance.new("ScreenGui")
         sg.Name = "BunnyNotify"
         sg.ResetOnSpawn = false
+        -- Attempt to protect GUI if executor supports it, otherwise use PlayerGui
         local parentToUse = CoreGui
         if not pcall(function() sg.Parent = CoreGui end) then
             parentToUse = LocalPlayer:WaitForChild("PlayerGui")
@@ -709,46 +692,39 @@ local function BunnyGlowNotification()
         end
         
         local frame = Instance.new("Frame", sg)
-        frame.Size = UDim2.new(0, 270, 0, 50)
-        -- Starts off-screen to the right
-        frame.Position = UDim2.new(1, 300, 1, -80) 
+        frame.Size = UDim2.new(0, 260, 0, 50)
+        frame.Position = UDim2.new(0, -300, 1, -80) -- Starts off-screen to the left
         frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-        frame.BackgroundTransparency = 0.4
+        frame.BackgroundTransparency = 0.4 -- Transparent background
         frame.BorderSizePixel = 0
         
         local corner = Instance.new("UICorner", frame)
         corner.CornerRadius = UDim.new(0, 8)
         
+        -- The "blue light stuff"
         local stroke = Instance.new("UIStroke", frame)
-        stroke.Color = Color3.fromRGB(0, 170, 255)
-        stroke.Thickness = 1.2 -- Thinner Blue Light
+        stroke.Color = Color3.fromRGB(0, 170, 255) -- Electric Neon Blue
+        stroke.Thickness = 2.5
         stroke.Transparency = 0.1
         
-        -- Custom Image Logo
-        local logo = Instance.new("ImageLabel", frame)
-        logo.Size = UDim2.new(0, 30, 0, 30)
-        logo.Position = UDim2.new(0, 12, 0.5, -15)
-        logo.BackgroundTransparency = 1
-        logo.Image = "rbxassetid://93880685309116" -- Your New Updated Logo
-        
         local textLabel = Instance.new("TextLabel", frame)
-        textLabel.Size = UDim2.new(1, -55, 1, 0)
-        textLabel.Position = UDim2.new(0, 52, 0, 0)
+        textLabel.Size = UDim2.new(1, -20, 1, 0)
+        textLabel.Position = UDim2.new(0, 15, 0, 0)
         textLabel.BackgroundTransparency = 1
-        textLabel.Text = "Bunny Hub has fully loaded."
+        textLabel.Text = "🐰 Bunny Hub has fully loaded."
         textLabel.TextColor3 = Color3.fromRGB(240, 255, 255)
         textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextSize = 13
+        textLabel.TextSize = 14
         textLabel.TextXAlignment = Enum.TextXAlignment.Left
         
-        -- Animate In (Slide from right edge to 20px off the right edge)
+        -- Animate In (Slide from left)
         local ts = game:GetService("TweenService")
-        local tIn = ts:Create(frame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(1, -290, 1, -80)})
+        local tIn = ts:Create(frame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0, 20, 1, -80)})
         tIn:Play()
         
         -- Wait 4 seconds, then Animate Out and Destroy
         task.delay(4, function()
-            local tOut = ts:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(1, 300, 1, -80)})
+            local tOut = ts:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(0, -300, 1, -80)})
             tOut:Play()
             tOut.Completed:Wait()
             sg:Destroy()
