@@ -1,1390 +1,759 @@
-local _UserInputService = game:GetService('UserInputService')
-local _TweenService = game:GetService('TweenService')
+-- ============================================================
+--  BUNNY HUB | WindUI Mobile Edition
+--  Advanced Aimlock, ESP, & Combat Features
+-- ============================================================
 
-local u3 = loadstring(game:HttpGet('https://raw.githubusercontent.com/ThundarZ/Welcome/main/Main/UI/Notification.lua'))()
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-function LoadScript()
-    getgenv().setting = {
-        ESPPlayer = true,
-        DevilESP = true,
-        LockPlayers = false,
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui          = game:GetService("CoreGui")
+local Lighting         = game:GetService("Lighting")
+local StarterGui       = game:GetService("StarterGui")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+-- ============================================================
+--  FAST LOCALS
+-- ============================================================
+local mathFloor  = math.floor
+local mathClamp  = math.clamp
+local mathAbs    = math.abs
+local mathMax    = math.max
+local mathRandom = math.random
+local Vector2New = Vector2.new
+local Vector3New = Vector3.new
+local Color3RGB  = Color3.fromRGB
+local CFrameNew  = CFrame.new
+
+-- ============================================================
+--  SETTINGS 
+-- ============================================================
+local Settings = {
+    Aimlock = {
+        Enabled            = false,
+        Prediction         = 0.135,
+        PredictionEnabled  = true,
+        AimMode            = "Smart",
+        IsAiming           = false,
+        CurrentTarget      = nil,
+        WallCheck          = true,
+        TeamCheck          = true,
+        SmoothAiming       = false,
+        SmoothSpeed        = 0.3,
+        StrafePrediction   = 1.0,
+        PeriodicDisable    = false,
+        Keybind            = "RightClick",
+    },
+    FOV = {
+        Visible        = true,
+        FollowCursor   = true,
+        Radius         = 150,
+        Thickness      = 1.5,
+        Color          = Color3RGB(255, 255, 255),
+        Transparency   = 0.8,
+        Filled         = false,
+        FilledColor    = Color3RGB(255, 255, 255),
+        FilledTransp   = 0.92,
+    },
+    Visuals = {
+        ESPEnabled         = false,
+        ESPBoxes           = true,
+        ESPNames           = true,
+        ESPNameStyle       = "Display Name",
+        ESPOutline         = true,
+        ESPTextScale       = 14,
+        UseCustomNameColor = false,
+        ESPNameColor       = Color3RGB(255, 255, 255),
+        ESPUsernameColor   = Color3RGB(180, 180, 200),
+        TeamCheck          = true,
+        ShowTeammates      = false,
+        TeammateColor      = Color3RGB(0, 200, 255),
+        UseVisColors       = true,
+        VisColor           = Color3RGB(50, 255, 80),
+        HiddenColor        = Color3RGB(255, 60, 60),
+        DistanceDisplay    = false,
+        HealthNumbers      = false,
+        HealthBar          = true,
+        ChamsEnabled       = false,
+        ChamsFillColor     = Color3RGB(255, 30, 30),
+        ChamsOutlineColor  = Color3RGB(255, 255, 255),
+        ChamsDepth         = true,
+        TracerLines        = false,
+        TracerOrigin       = "Bottom",
+        TracerColor        = Color3RGB(0, 200, 255),
+        SnapLines          = false,
+        SnapLineColor      = Color3RGB(255, 0, 220),
+        TargetUI           = true,
+        HealthPosition     = "TopRight",
+        MaxESPDistance     = 1000,
+    },
+    Player = {
+        WalkSpeedEnabled = false,
+        WalkSpeed        = 16,
+        JumpPowerEnabled = false,
+        JumpPower        = 50,
+        NoclipEnabled    = false,
+        NoclipKeybind    = "N",
+    },
+    DetectionAvoidance = {
+        RandomJitter       = false,
+        JitterAmount       = 0.05,
+        PeriodicAimDisable = false,
+        DisableChance      = 0.1,
+        DisableDuration    = 0.2,
+    },
+    UI = {
+        ToggleKey = "K",
+    },
+    
+    -- [ BUNNY HUB SPECIFIC SETTINGS ] --
+    Bunny = {
+        TargetMode    = "Players",
+        TargetPlayer  = "Nearest",
+        SpecificPlayer= nil,
+        SilentAim     = false,
+        AimbotGun     = false,
+        AimbotSkill   = false,
+        FastAttack    = false,
+        FastAtkDelay  = 0,
+        AutoHaki      = false,
+        AutoV3        = false,
+        AutoV4        = false,
+        WalkWater     = false,
+        SafeMode      = false,
+        SafeHPThresh  = 30,
+        ESPRange      = 500,
     }
-    Fov = 45
+}
 
-    local _THUNDERZ = game.CoreGui:FindFirstChild('THUNDERZ')
+local SelectWeaponGun = ""
 
-    if _THUNDERZ then
-        _THUNDERZ:Destroy()
+-- ============================================================
+--  BUNNY HUB HELPERS & TARGETING
+-- ============================================================
+local function Notify(title, text, dur)
+    pcall(function() StarterGui:SetCore("SendNotification",{Title=title,Text=text,Duration=dur or 2}) end)
+end
+
+local function InSafeZone()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg and pg:FindFirstChild("Main") and pg.Main:FindFirstChild("SafeZone") and pg.Main.SafeZone.Visible then return true end
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("ForceField") then return true end
+    return false
+end
+
+local function IsValidBunnyPlayer(p)
+    if not p or not p.Character then return false end
+    local hum = p.Character:FindFirstChild("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    if InSafeZone() then return false end
+    if p.Character:FindFirstChildOfClass("ForceField") then return false end
+    return true
+end
+
+local function GetNearestBunnyPlayer()
+    if InSafeZone() then return nil end
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+
+    if Settings.Bunny.TargetPlayer == "Specific" and Settings.Bunny.SpecificPlayer then
+        local p = Players:FindFirstChild(Settings.Bunny.SpecificPlayer)
+        if p and IsValidBunnyPlayer(p) then return p.Character:FindFirstChild("HumanoidRootPart") end
+        return nil
     end
-    if _G.Color == nil then
-        _G.Color = Color3.fromRGB(0, 225, 225)
-    end
 
-    local _ThunderScreen2 = game.CoreGui:FindFirstChild('ThunderScreen')
-
-    if _ThunderScreen2 then
-        _ThunderScreen2:Destroy()
-    end
-
-    local _ScreenGui2 = Instance.new('ScreenGui')
-    local _TextButton3 = Instance.new('TextButton')
-    local _UICorner10 = Instance.new('UICorner')
-    local _ImageLabel2 = Instance.new('ImageLabel')
-
-    _ScreenGui2.Name = 'ThunderMain'
-    _ScreenGui2.Parent = game.CoreGui
-    _ScreenGui2.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    _TextButton3.Name = 'ThunderToggleUI'
-    _TextButton3.Parent = _ScreenGui2
-    _TextButton3.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
-    _TextButton3.BorderSizePixel = 0
-    _TextButton3.Position = UDim2.new(0.120833337, 0, 0.0952890813, 0)
-    _TextButton3.Size = UDim2.new(0, 50, 0, 50)
-    _TextButton3.Font = Enum.Font.SourceSans
-    _TextButton3.Text = ''
-    _TextButton3.TextColor3 = Color3.fromRGB(0, 0, 0)
-    _TextButton3.TextSize = 14
-    _TextButton3.Draggable = true
-
-    _TextButton3.MouseButton1Click:Connect(function()
-        game.CoreGui:FindFirstChild('THUNDERZ').Enabled = not game.CoreGui:FindFirstChild('THUNDERZ').Enabled
-    end)
-
-    _UICorner10.Name = 'ThunderCornerUI'
-    _UICorner10.Parent = _TextButton3
-    _ImageLabel2.Name = 'MODILEMAGE'
-    _ImageLabel2.Parent = _TextButton3
-    _ImageLabel2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    _ImageLabel2.BackgroundTransparency = 1
-    _ImageLabel2.BorderSizePixel = 0
-    _ImageLabel2.Position = UDim2.new(0, 0, 0, 0)
-    _ImageLabel2.Size = UDim2.new(0, 50, 0, 50)
-    _ImageLabel2.Image = 'http://www.roblox.com/asset/?id=9906600154'
-    Playersaimbot = nil
-
-    local u75 = game.Players.LocalPlayer:GetMouse()
-
-    game.GetService(game, 'GuiService')
-
-    local u76 = game.GetService(game, 'Players')
-    local _ = u76.LocalPlayer
-    local _CurrentCamera = game.GetService(game, 'Workspace').CurrentCamera
-
-    Drawing.new('Circle')
-
-    local _Frame10 = Instance.new('Frame')
-    local _UICorner11 = Instance.new('UICorner')
-    local _ImageLabel3 = Instance.new('ImageLabel')
-    local _UICorner12 = Instance.new('UICorner')
-    local _TextLabel4 = Instance.new('TextLabel')
-    local _TextLabel5 = Instance.new('TextLabel')
-    local _TextLabel6 = Instance.new('TextLabel')
-    local _TextLabel7 = Instance.new('TextLabel')
-    local _TextLabel8 = Instance.new('TextLabel')
-
-    Instance.new('TextLabel')
-    Instance.new('TextLabel')
-
-    local _Frame11 = Instance.new('Frame')
-    local _UICorner13 = Instance.new('UICorner')
-    local _Frame12 = Instance.new('Frame')
-    local _UICorner14 = Instance.new('UICorner')
-    local _UserInputService2 = game:GetService('UserInputService')
-    local _TweenService2 = game:GetService('TweenService')
-
-    local function u107(p93, p94)
-        local u95 = nil
-        local u96 = nil
-        local u97 = nil
-        local u98 = nil
-
-        local function u103(p99)
-            local v100 = p99.Position - u95
-            local v101 = _TweenService2
-            local v102 = {
-                Position = UDim2.new(u96.X.Scale, u96.X.Offset + v100.X, u96.Y.Scale, u96.Y.Offset + v100.Y),
-            }
-
-            v101:Create(p94, TweenInfo.new(0.15), v102):Play()
+    local bestDist, bestHRP = math.huge, nil
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and IsValidBunnyPlayer(v) then
+            local hrp = v.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local d = (hrp.Position - myHRP.Position).Magnitude
+                if d < bestDist and d <= Settings.Bunny.ESPRange then
+                    bestDist = d; bestHRP = hrp
+                end
+            end
         end
-
-        p93.InputBegan:Connect(function(p104)
-            if p104.UserInputType == Enum.UserInputType.MouseButton1 or p104.UserInputType == Enum.UserInputType.Touch then
-                u97 = true
-                u95 = p104.Position
-                u96 = p94.Position
-
-                p104.Changed:Connect(function()
-                    if p104.UserInputState == Enum.UserInputState.End then
-                        u97 = false
-                    end
-                end)
-            end
-        end)
-        p93.InputChanged:Connect(function(p105)
-            if p105.UserInputType == Enum.UserInputType.MouseMovement or p105.UserInputType == Enum.UserInputType.Touch then
-                u98 = p105
-            end
-        end)
-        _UserInputService2.InputChanged:Connect(function(p106)
-            if p106 == u98 and u97 then
-                u103(p106)
-            end
-        end)
     end
-
-    local _ThunderZ = ({
-        Window = function(_, p108, p109, p110)
-            local u111 = false
-            local v112 = p110 or Enum.KeyCode.RightControl
-            local u113 = string.gsub(tostring(v112), 'Enum.KeyCode.', '')
-            local _ScreenGui3 = Instance.new('ScreenGui')
-
-            _ScreenGui3.Name = 'THUNDERZ'
-            _ScreenGui3.Parent = game.CoreGui
-            _ScreenGui3.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-            local _Frame13 = Instance.new('Frame')
-
-            _Frame13.Name = 'Main'
-            _Frame13.Parent = _ScreenGui3
-            _Frame13.ClipsDescendants = true
-            _Frame13.AnchorPoint = Vector2.new(0.5, 0.5)
-            _Frame13.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-            _Frame13.Position = UDim2.new(0.5, 0, 0.5, 0)
-            _Frame13.Size = UDim2.new(0, 0, 0, 0)
-
-            local v116 = _Frame13
-
-            _Frame13.TweenSize(v116, UDim2.new(0, 286, 0, 320), 'Out', 'Quad', 0.4, true)
-
-            local _UICorner15 = Instance.new('UICorner')
-
-            _UICorner15.Name = 'MCNR'
-            _UICorner15.Parent = _Frame13
-
-            local _Frame14 = Instance.new('Frame')
-
-            _Frame14.Name = 'Top'
-            _Frame14.Parent = _Frame13
-            _Frame14.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-            _Frame14.Size = UDim2.new(0, 286, 0, 27)
-
-            local _UICorner16 = Instance.new('UICorner')
-
-            _UICorner16.Name = 'TCNR'
-            _UICorner16.Parent = _Frame14
-
-            local _ImageLabel4 = Instance.new('ImageLabel')
-
-            _ImageLabel4.Name = 'Logo'
-            _ImageLabel4.Parent = _Frame14
-            _ImageLabel4.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _ImageLabel4.BackgroundTransparency = 1
-            _ImageLabel4.Position = UDim2.new(0, 10, 0, 1)
-            _ImageLabel4.Size = UDim2.new(0, 30, 0, 25)
-            _ImageLabel4.Image = 'rbxassetid://' .. tostring(p109 or 0)
-
-            local _TextLabel9 = Instance.new('TextLabel')
-
-            _TextLabel9.Name = 'Name'
-            _TextLabel9.Parent = _Frame14
-            _TextLabel9.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel9.BackgroundTransparency = 1
-            _TextLabel9.Position = UDim2.new(0.1709756112, 0, 0, 0)
-            _TextLabel9.Size = UDim2.new(0, 61, 0, 27)
-            _TextLabel9.Font = Enum.Font.GothamSemibold
-            _TextLabel9.Text = p108
-            _TextLabel9.TextColor3 = Color3.fromRGB(225, 225, 225)
-            _TextLabel9.TextSize = 17
-
-            local _TextLabel10 = Instance.new('TextLabel')
-
-            _TextLabel10.Name = 'Hub'
-            _TextLabel10.Parent = _Frame14
-            _TextLabel10.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel10.BackgroundTransparency = 1
-            _TextLabel10.Position = UDim2.new(0, 130, 0, 0)
-            _TextLabel10.Size = UDim2.new(0, 81, 0, 27)
-            _TextLabel10.Font = Enum.Font.GothamSemibold
-            _TextLabel10.Text = '[ Aimbot ]'
-            _TextLabel10.TextColor3 = _G.Color
-            _TextLabel10.TextSize = 17
-            _TextLabel10.TextXAlignment = Enum.TextXAlignment.Left
-
-            local _Frame15 = Instance.new('Frame')
-
-            _Frame15.Name = 'Page'
-            _Frame15.Parent = _Frame13
-            _Frame15.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-            _Frame15.Position = UDim2.new(0.01, 0, 0.077000003, 0)
-            _Frame15.Size = UDim2.new(0, 280, 0, 289)
-            _Frame10.Name = 'Profile'
-            _Frame10.Parent = _Frame15
-            _Frame10.BackgroundColor3 = Color3.fromRGB(0, 225, 225)
-            _Frame10.Position = UDim2.new(0.0570342205, 0, 0.1, 0)
-            _Frame10.Size = UDim2.new(0, 60, 0, 60)
-            _UICorner11.CornerRadius = UDim.new(0, 100)
-            _UICorner11.Name = 'ProfileCorner'
-            _UICorner11.Parent = _Frame10
-            _ImageLabel3.Name = 'ImageProfile'
-            _ImageLabel3.Parent = _Frame10
-            _ImageLabel3.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            _ImageLabel3.BackgroundTransparency = 0
-            _ImageLabel3.Position = UDim2.new(0, 1, 0, 1)
-            _ImageLabel3.Size = UDim2.new(0, 58, 0, 58)
-            _ImageLabel3.Image = ''
-            _UICorner12.CornerRadius = UDim.new(0, 100)
-            _UICorner12.Name = 'ImageProfileCorner'
-            _UICorner12.Parent = _ImageLabel3
-            _TextLabel5.Name = 'HealthPlayers'
-            _TextLabel5.Parent = _Frame10
-            _TextLabel5.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel5.BackgroundTransparency = 1
-            _TextLabel5.Position = UDim2.new(1.24220526, 0, 0.377586216, 0)
-            _TextLabel5.Size = UDim2.new(0, 173, 0, 22)
-            _TextLabel5.Font = Enum.Font.DenkOne
-            _TextLabel5.Text = 'Health | [ None ]'
-            _TextLabel5.TextColor3 = Color3.fromRGB(0, 225, 225)
-            _TextLabel5.TextSize = 19
-            _TextLabel5.TextXAlignment = Enum.TextXAlignment.Left
-            _TextLabel5.TextYAlignment = Enum.TextYAlignment.Bottom
-            _TextLabel7.Name = 'loackplayerslabel'
-            _TextLabel7.Parent = _Frame10
-            _TextLabel7.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel7.BackgroundTransparency = 1
-            _TextLabel7.Position = UDim2.new(0.1, 0, 1.1, 0)
-            _TextLabel7.Size = UDim2.new(0, 173, 0, 22)
-            _TextLabel7.Font = Enum.Font.Arcade
-            _TextLabel7.Text = 'Lock Players | OFF'
-            _TextLabel7.TextColor3 = Color3.fromRGB(0, 225, 225)
-            _TextLabel7.TextSize = 19
-            _TextLabel7.TextXAlignment = Enum.TextXAlignment.Left
-            _TextLabel7.TextYAlignment = Enum.TextYAlignment.Bottom
-            _TextLabel4.Name = 'LevelPlayer'
-            _TextLabel4.Parent = _Frame10
-            _TextLabel4.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel4.BackgroundTransparency = 1
-            _TextLabel4.Position = UDim2.new(1.24220526, 0, -0.34, 0)
-            _TextLabel4.Size = UDim2.new(0, 173, 0, 22)
-            _TextLabel4.Font = Enum.Font.DenkOne
-            _TextLabel4.Text = 'Level   | [ None ]'
-            _TextLabel4.TextColor3 = Color3.fromRGB(0, 225, 225)
-            _TextLabel4.TextSize = 19
-            _TextLabel4.TextXAlignment = Enum.TextXAlignment.Left
-            _TextLabel4.TextYAlignment = Enum.TextYAlignment.Bottom
-            _TextLabel6.Name = 'NamePlayers'
-            _TextLabel6.Parent = _Frame10
-            _TextLabel6.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel6.BackgroundTransparency = 1
-            _TextLabel6.Position = UDim2.new(1.24220526, 0, 0.0109195411, 0)
-            _TextLabel6.Size = UDim2.new(0, 173, 0, 22)
-            _TextLabel6.Font = Enum.Font.DenkOne
-            _TextLabel6.Text = 'Name  | [ None ]'
-            _TextLabel6.TextColor3 = Color3.fromRGB(0, 225, 225)
-            _TextLabel6.TextSize = 19
-            _TextLabel6.TextXAlignment = Enum.TextXAlignment.Left
-            _TextLabel6.TextYAlignment = Enum.TextYAlignment.Bottom
-            _Frame11.Name = 'Healthbar'
-            _Frame11.Parent = _Frame10
-            _Frame11.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _Frame11.Position = UDim2.new(1.23333335, 0, 0.850000024, 0)
-            _Frame11.Size = UDim2.new(0, 155, 0, 8)
-            _UICorner13.Name = 'HealthbarCorner'
-            _UICorner13.Parent = _Frame11
-            _Frame12.Name = 'Healthgreen'
-            _Frame12.Parent = _Frame11
-            _Frame12.BackgroundColor3 = Color3.fromRGB(0, 227, 110)
-            _Frame12.Size = UDim2.new(0, 185, 0, 8)
-            _UICorner14.Name = 'HealthgreenCorner'
-            _UICorner14.Parent = _Frame12
-            _TextLabel8.Name = 'GuiName'
-            _TextLabel8.Parent = _Frame13
-            _TextLabel8.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _TextLabel8.BackgroundTransparency = 1
-            _TextLabel8.Position = UDim2.new(0, 0, 0.1, 0)
-            _TextLabel8.Size = UDim2.new(0, 173, 0, 22)
-            _TextLabel8.Font = Enum.Font.Fondamento
-            _TextLabel8.Text = ''
-            _TextLabel8.TextColor3 = Color3.fromRGB(0, 225, 225)
-            _TextLabel8.TextSize = 19
-
-            local _UICorner17 = Instance.new('UICorner')
-
-            _UICorner17.Name = 'PCNR'
-            _UICorner17.Parent = _Frame15
-
-            local _Frame16 = Instance.new('Frame')
-
-            _Frame16.Name = 'MainPage'
-            _Frame16.Parent = _Frame15
-            _Frame16.ClipsDescendants = true
-            _Frame16.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            _Frame16.BackgroundTransparency = 1
-            _Frame16.Size = UDim2.new(0, 410, 0, 316)
-
-            local _Folder = Instance.new('Folder')
-
-            _Folder.Name = 'PageList'
-            _Folder.Parent = _Frame16
-
-            local _UIPageLayout = Instance.new('UIPageLayout')
-
-            _UIPageLayout.Parent = _Folder
-            _UIPageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-            _UIPageLayout.EasingDirection = Enum.EasingDirection.InOut
-            _UIPageLayout.EasingStyle = Enum.EasingStyle.Quad
-            _UIPageLayout.FillDirection = Enum.FillDirection.Vertical
-            _UIPageLayout.Padding = UDim.new(0, 15)
-            _UIPageLayout.TweenTime = 0.4
-            _UIPageLayout.GamepadInputEnabled = false
-            _UIPageLayout.ScrollWheelInputEnabled = false
-            _UIPageLayout.TouchInputEnabled = false
-
-            u107(_Frame14, _Frame13)
-            _UserInputService2.InputBegan:Connect(function(p128)
-                if p128.KeyCode == Enum.KeyCode[u113] then
-                    if u111 ~= false then
-                        u111 = false
-
-                        _Frame13:TweenSize(UDim2.new(0, 286, 0, 320), 'Out', 'Quad', 0.5, true)
-                    else
-                        u111 = true
-
-                        _Frame13:TweenSize(UDim2.new(0, 0, 0, 0), 'In', 'Quad', 0.4, true)
-                    end
-                end
-            end)
-
-            return {
-                AddToggle = function(_, p129, p130, p131)
-                    local v132 = p130 or false
-                    local u133 = v132
-                    local _Frame17 = Instance.new('Frame')
-                    local _UICorner18 = Instance.new('UICorner')
-                    local _TextButton4 = Instance.new('TextButton')
-                    local _UICorner19 = Instance.new('UICorner')
-                    local _TextLabel11 = Instance.new('TextLabel')
-                    local _Frame18 = Instance.new('Frame')
-                    local _UICorner20 = Instance.new('UICorner')
-                    local _Frame19 = Instance.new('Frame')
-                    local _UICorner21 = Instance.new('UICorner')
-
-                    _Frame17.Name = 'Toggle'
-                    _Frame17.Parent = _Frame15
-                    _Frame17.BackgroundColor3 = _G.Color
-                    _Frame17.Size = UDim2.new(0, 275, 0, 31)
-                    _Frame17.Position = UDim2.new(0, 1, 0, 135)
-                    _UICorner18.CornerRadius = UDim.new(0, 5)
-                    _UICorner18.Parent = _Frame17
-                    _TextButton4.Name = 'Button'
-                    _TextButton4.Parent = _Frame17
-                    _TextButton4.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    _TextButton4.Position = UDim2.new(0, 1, 0, 1)
-                    _TextButton4.Size = UDim2.new(0, 273, 0, 29)
-                    _TextButton4.AutoButtonColor = false
-                    _TextButton4.Font = Enum.Font.SourceSans
-                    _TextButton4.Text = ''
-                    _TextButton4.TextColor3 = Color3.fromRGB(0, 0, 0)
-                    _TextButton4.TextSize = 11
-                    _UICorner19.CornerRadius = UDim.new(0, 5)
-                    _UICorner19.Parent = _TextButton4
-                    _TextLabel11.Name = 'Label'
-                    _TextLabel11.Parent = _Frame17
-                    _TextLabel11.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    _TextLabel11.BackgroundTransparency = 1
-                    _TextLabel11.Position = UDim2.new(0, 1, 0, 1)
-                    _TextLabel11.Size = UDim2.new(0, 220, 0, 29)
-                    _TextLabel11.Font = Enum.Font.GothamSemibold
-                    _TextLabel11.Text = p129
-                    _TextLabel11.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextLabel11.TextSize = 15
-                    _Frame18.Name = 'ToggleImage'
-                    _Frame18.Parent = _Frame17
-                    _Frame18.BackgroundColor3 = Color3.fromRGB(225, 225, 225)
-                    _Frame18.Position = UDim2.new(0, 220, 0, 5)
-                    _Frame18.Size = UDim2.new(0, 45, 0, 20)
-                    _UICorner20.CornerRadius = UDim.new(0, 10)
-                    _UICorner20.Parent = _Frame18
-                    _Frame19.Name = 'Circle'
-                    _Frame19.Parent = _Frame18
-                    _Frame19.BackgroundColor3 = Color3.fromRGB(227, 60, 60)
-                    _Frame19.Position = UDim2.new(0, 2, 0, 2)
-                    _Frame19.Size = UDim2.new(0, 16, 0, 16)
-                    _UICorner21.CornerRadius = UDim.new(0, 10)
-                    _UICorner21.Parent = _Frame19
-
-                    _TextButton4.MouseButton1Click:Connect(function()
-                        if u133 ~= false then
-                            u133 = false
-
-                            _Frame19:TweenPosition(UDim2.new(0, 2, 0, 2), 'Out', 'Sine', 0.2, true)
-                            _TweenService2:Create(_Frame19, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                BackgroundColor3 = Color3.fromRGB(227, 60, 110),
-                            }):Play()
-                        else
-                            u133 = true
-
-                            _Frame19:TweenPosition(UDim2.new(0, 27, 0, 2), 'Out', 'Sine', 0.2, true)
-                            _TweenService2:Create(_Frame19, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                BackgroundColor3 = _G.Color,
-                            }):Play()
-                        end
-
-                        pcall(p131, u133)
-                    end)
-
-                    if v132 == true then
-                        u133 = true
-
-                        local v143 = _Frame19
-
-                        _Frame19.TweenPosition(v143, UDim2.new(0, 27, 0, 2), 'Out', 'Sine', 0.4, true)
-                        _TweenService2:Create(_Frame19, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                            BackgroundColor3 = _G.Color,
-                        }):Play()
-                        pcall(p131, u133)
-                    end
-                end,
-                Button = function(_, p144, p145)
-                    local _Frame20 = Instance.new('Frame')
-                    local _UICorner22 = Instance.new('UICorner')
-                    local _TextButton5 = Instance.new('TextButton')
-                    local _UICorner23 = Instance.new('UICorner')
-                    local _Frame21 = Instance.new('Frame')
-                    local _UICorner24 = Instance.new('UICorner')
-
-                    _Frame20.Name = 'Button'
-                    _Frame20.Parent = _Frame15
-                    _Frame20.BackgroundColor3 = _G.Color
-                    _Frame20.Size = UDim2.new(0, 275, 0, 31)
-                    _Frame20.Position = UDim2.new(0, 1, 0, 174)
-                    _UICorner22.CornerRadius = UDim.new(0, 5)
-                    _UICorner22.Parent = _Frame20
-                    _TextButton5.Name = 'TextBtn'
-                    _TextButton5.Parent = _Frame20
-                    _TextButton5.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    _TextButton5.Position = UDim2.new(0, 1, 0, 1)
-                    _TextButton5.Size = UDim2.new(0, 273, 0, 29)
-                    _TextButton5.AutoButtonColor = false
-                    _TextButton5.Font = Enum.Font.GothamSemibold
-                    _TextButton5.Text = p144
-                    _TextButton5.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextButton5.TextSize = 15
-                    _UICorner23.CornerRadius = UDim.new(0, 5)
-                    _UICorner23.Parent = _TextButton5
-                    _Frame21.Name = 'Black'
-                    _Frame21.Parent = _Frame20
-                    _Frame21.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                    _Frame21.BackgroundTransparency = 1
-                    _Frame21.BorderSizePixel = 0
-                    _Frame21.Position = UDim2.new(0, 1, 0, 1)
-                    _Frame21.Size = UDim2.new(0, 273, 0, 29)
-                    _UICorner24.CornerRadius = UDim.new(0, 5)
-                    _UICorner24.Parent = _Frame21
-
-                    _TextButton5.MouseEnter:Connect(function()
-                        _TweenService2:Create(_Frame21, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.7}):Play()
-                    end)
-                    _TextButton5.MouseLeave:Connect(function()
-                        _TweenService2:Create(_Frame21, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
-                    end)
-                    _TextButton5.MouseButton1Click:Connect(function()
-                        _TextButton5.TextSize = 0
-
-                        _TweenService2:Create(_TextButton5, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextSize = 15}):Play()
-                        p145()
-                    end)
-                end,
-                AddButton = function(_, p152, p153)
-                    local _Frame22 = Instance.new('Frame')
-                    local _UICorner25 = Instance.new('UICorner')
-                    local _TextButton6 = Instance.new('TextButton')
-                    local _UICorner26 = Instance.new('UICorner')
-                    local _Frame23 = Instance.new('Frame')
-                    local _UICorner27 = Instance.new('UICorner')
-
-                    _Frame22.Name = 'Button'
-                    _Frame22.Parent = _Frame15
-                    _Frame22.BackgroundColor3 = _G.Color
-                    _Frame22.Size = UDim2.new(0, 275, 0, 31)
-                    _Frame22.Position = UDim2.new(0, 1, 0, 254)
-                    _UICorner25.CornerRadius = UDim.new(0, 5)
-                    _UICorner25.Parent = _Frame22
-                    _TextButton6.Name = 'TextBtn'
-                    _TextButton6.Parent = _Frame22
-                    _TextButton6.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    _TextButton6.Position = UDim2.new(0, 1, 0, 1)
-                    _TextButton6.Size = UDim2.new(0, 273, 0, 29)
-                    _TextButton6.AutoButtonColor = false
-                    _TextButton6.Font = Enum.Font.GothamSemibold
-                    _TextButton6.Text = p152
-                    _TextButton6.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextButton6.TextSize = 15
-                    _UICorner26.CornerRadius = UDim.new(0, 5)
-                    _UICorner26.Parent = _TextButton6
-                    _Frame23.Name = 'Black'
-                    _Frame23.Parent = _Frame22
-                    _Frame23.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                    _Frame23.BackgroundTransparency = 1
-                    _Frame23.BorderSizePixel = 0
-                    _Frame23.Position = UDim2.new(0, 1, 0, 1)
-                    _Frame23.Size = UDim2.new(0, 273, 0, 29)
-                    _UICorner27.CornerRadius = UDim.new(0, 5)
-                    _UICorner27.Parent = _Frame23
-
-                    _TextButton6.MouseEnter:Connect(function()
-                        _TweenService2:Create(_Frame23, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.7}):Play()
-                    end)
-                    _TextButton6.MouseLeave:Connect(function()
-                        _TweenService2:Create(_Frame23, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
-                    end)
-                    _TextButton6.MouseButton1Click:Connect(function()
-                        _TextButton6.TextSize = 0
-
-                        _TweenService2:Create(_TextButton6, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextSize = 15}):Play()
-                        p153()
-                    end)
-                end,
-                Toggle = function(_, p160, p161, p162)
-                    local v163 = p161 or false
-                    local u164 = v163
-                    local _Frame24 = Instance.new('Frame')
-                    local _UICorner28 = Instance.new('UICorner')
-                    local _TextButton7 = Instance.new('TextButton')
-                    local _UICorner29 = Instance.new('UICorner')
-                    local _TextLabel12 = Instance.new('TextLabel')
-                    local _Frame25 = Instance.new('Frame')
-                    local _UICorner30 = Instance.new('UICorner')
-                    local _Frame26 = Instance.new('Frame')
-                    local _UICorner31 = Instance.new('UICorner')
-
-                    _Frame24.Name = 'Toggle'
-                    _Frame24.Parent = _Frame15
-                    _Frame24.BackgroundColor3 = _G.Color
-                    _Frame24.Size = UDim2.new(0, 275, 0, 31)
-                    _Frame24.Position = UDim2.new(0, 1, 0, 215)
-                    _UICorner28.CornerRadius = UDim.new(0, 5)
-                    _UICorner28.Parent = _Frame24
-                    _TextButton7.Name = 'Button'
-                    _TextButton7.Parent = _Frame24
-                    _TextButton7.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    _TextButton7.Position = UDim2.new(0, 1, 0, 1)
-                    _TextButton7.Size = UDim2.new(0, 273, 0, 29)
-                    _TextButton7.AutoButtonColor = false
-                    _TextButton7.Font = Enum.Font.SourceSans
-                    _TextButton7.Text = ''
-                    _TextButton7.TextColor3 = Color3.fromRGB(0, 0, 0)
-                    _TextButton7.TextSize = 11
-                    _UICorner29.CornerRadius = UDim.new(0, 5)
-                    _UICorner29.Parent = _TextButton7
-                    _TextLabel12.Name = 'Label'
-                    _TextLabel12.Parent = _Frame24
-                    _TextLabel12.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    _TextLabel12.BackgroundTransparency = 1
-                    _TextLabel12.Position = UDim2.new(0, 1, 0, 1)
-                    _TextLabel12.Size = UDim2.new(0, 220, 0, 29)
-                    _TextLabel12.Font = Enum.Font.GothamSemibold
-                    _TextLabel12.Text = p160
-                    _TextLabel12.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextLabel12.TextSize = 15
-                    _Frame25.Name = 'ToggleImage'
-                    _Frame25.Parent = _Frame24
-                    _Frame25.BackgroundColor3 = Color3.fromRGB(225, 225, 225)
-                    _Frame25.Position = UDim2.new(0, 220, 0, 5)
-                    _Frame25.Size = UDim2.new(0, 45, 0, 20)
-                    _UICorner30.CornerRadius = UDim.new(0, 10)
-                    _UICorner30.Parent = _Frame25
-                    _Frame26.Name = 'Circle'
-                    _Frame26.Parent = _Frame25
-                    _Frame26.BackgroundColor3 = Color3.fromRGB(227, 60, 60)
-                    _Frame26.Position = UDim2.new(0, 2, 0, 2)
-                    _Frame26.Size = UDim2.new(0, 16, 0, 16)
-                    _UICorner31.CornerRadius = UDim.new(0, 10)
-                    _UICorner31.Parent = _Frame26
-
-                    _TextButton7.MouseButton1Click:Connect(function()
-                        if u164 ~= false then
-                            u164 = false
-
-                            _Frame26:TweenPosition(UDim2.new(0, 2, 0, 2), 'Out', 'Sine', 0.2, true)
-                            _TweenService2:Create(_Frame26, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                BackgroundColor3 = Color3.fromRGB(227, 60, 110),
-                            }):Play()
-                        else
-                            u164 = true
-
-                            _Frame26:TweenPosition(UDim2.new(0, 27, 0, 2), 'Out', 'Sine', 0.2, true)
-                            _TweenService2:Create(_Frame26, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                BackgroundColor3 = _G.Color,
-                            }):Play()
-                        end
-
-                        pcall(p162, u164)
-                    end)
-
-                    if v163 == true then
-                        u164 = true
-
-                        local v174 = _Frame26
-
-                        _Frame26.TweenPosition(v174, UDim2.new(0, 27, 0, 2), 'Out', 'Sine', 0.4, true)
-                        _TweenService2:Create(_Frame26, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                            BackgroundColor3 = _G.Color,
-                        }):Play()
-                        pcall(p162, u164)
-                    end
-                end,
-                Toggles = function(_, p175, p176, p177)
-                    local v178 = p176 or false
-                    local u179 = v178
-                    local _Frame27 = Instance.new('Frame')
-                    local _UICorner32 = Instance.new('UICorner')
-                    local _TextButton8 = Instance.new('TextButton')
-                    local _UICorner33 = Instance.new('UICorner')
-                    local _TextLabel13 = Instance.new('TextLabel')
-                    local _Frame28 = Instance.new('Frame')
-                    local _UICorner34 = Instance.new('UICorner')
-                    local _Frame29 = Instance.new('Frame')
-                    local _UICorner35 = Instance.new('UICorner')
-
-                    _Frame27.Name = 'Toggle'
-                    _Frame27.Parent = _Frame15
-                    _Frame27.BackgroundColor3 = _G.Color
-                    _Frame27.Size = UDim2.new(0, 275, 0, 31)
-                    _Frame27.Position = UDim2.new(0, 1, 0, 315)
-                    _UICorner32.CornerRadius = UDim.new(0, 5)
-                    _UICorner32.Parent = _Frame27
-                    _TextButton8.Name = 'Button'
-                    _TextButton8.Parent = _Frame27
-                    _TextButton8.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    _TextButton8.Position = UDim2.new(0, 1, 0, 1)
-                    _TextButton8.Size = UDim2.new(0, 273, 0, 29)
-                    _TextButton8.AutoButtonColor = false
-                    _TextButton8.Font = Enum.Font.SourceSans
-                    _TextButton8.Text = ''
-                    _TextButton8.TextColor3 = Color3.fromRGB(0, 0, 0)
-                    _TextButton8.TextSize = 11
-                    _UICorner33.CornerRadius = UDim.new(0, 5)
-                    _UICorner33.Parent = _TextButton8
-                    _TextLabel13.Name = 'Label'
-                    _TextLabel13.Parent = _Frame27
-                    _TextLabel13.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    _TextLabel13.BackgroundTransparency = 1
-                    _TextLabel13.Position = UDim2.new(0, 1, 0, 1)
-                    _TextLabel13.Size = UDim2.new(0, 220, 0, 29)
-                    _TextLabel13.Font = Enum.Font.GothamSemibold
-                    _TextLabel13.Text = p175
-                    _TextLabel13.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextLabel13.TextSize = 15
-                    _Frame28.Name = 'ToggleImage'
-                    _Frame28.Parent = _Frame27
-                    _Frame28.BackgroundColor3 = Color3.fromRGB(225, 225, 225)
-                    _Frame28.Position = UDim2.new(0, 220, 0, 5)
-                    _Frame28.Size = UDim2.new(0, 45, 0, 20)
-                    _UICorner34.CornerRadius = UDim.new(0, 10)
-                    _UICorner34.Parent = _Frame28
-                    _Frame29.Name = 'Circle'
-                    _Frame29.Parent = _Frame28
-                    _Frame29.BackgroundColor3 = Color3.fromRGB(227, 60, 60)
-                    _Frame29.Position = UDim2.new(0, 2, 0, 2)
-                    _Frame29.Size = UDim2.new(0, 16, 0, 16)
-                    _UICorner35.CornerRadius = UDim.new(0, 10)
-                    _UICorner35.Parent = _Frame29
-
-                    _TextButton8.MouseButton1Click:Connect(function()
-                        if u179 ~= false then
-                            u179 = false
-
-                            _Frame29:TweenPosition(UDim2.new(0, 2, 0, 2), 'Out', 'Sine', 0.2, true)
-                            _TweenService2:Create(_Frame29, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                BackgroundColor3 = Color3.fromRGB(227, 60, 110),
-                            }):Play()
-                        else
-                            u179 = true
-
-                            _Frame29:TweenPosition(UDim2.new(0, 27, 0, 2), 'Out', 'Sine', 0.2, true)
-                            _TweenService2:Create(_Frame29, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                BackgroundColor3 = _G.Color,
-                            }):Play()
-                        end
-
-                        pcall(p177, u179)
-                    end)
-
-                    if v178 == true then
-                        u179 = true
-
-                        local v189 = _Frame29
-
-                        _Frame29.TweenPosition(v189, UDim2.new(0, 27, 0, 2), 'Out', 'Sine', 0.4, true)
-                        _TweenService2:Create(_Frame29, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                            BackgroundColor3 = _G.Color,
-                        }):Play()
-                        pcall(p177, u179)
-                    end
-                end,
-                AddSlider = function(_, p190, p191, p192, p193, p194)
-                    local _Frame30 = Instance.new('Frame')
-                    local _UICorner36 = Instance.new('UICorner')
-                    local _Frame31 = Instance.new('Frame')
-                    local _UICorner37 = Instance.new('UICorner')
-                    local _TextLabel14 = Instance.new('TextLabel')
-                    local _Frame32 = Instance.new('Frame')
-                    local _TextButton9 = Instance.new('TextButton')
-                    local _Frame33 = Instance.new('Frame')
-                    local _Frame34 = Instance.new('Frame')
-                    local _UICorner38 = Instance.new('UICorner')
-                    local _UICorner39 = Instance.new('UICorner')
-                    local _Frame35 = Instance.new('Frame')
-                    local _UICorner40 = Instance.new('UICorner')
-                    local _Frame36 = Instance.new('Frame')
-                    local _UICorner41 = Instance.new('UICorner')
-                    local _TextBox2 = Instance.new('TextBox')
-                    local _UICorner42 = Instance.new('UICorner')
-
-                    _Frame30.Name = 'Slider'
-                    _Frame30.Parent = _Frame15
-                    _Frame30.BackgroundColor3 = _G.Color
-                    _Frame30.BackgroundTransparency = 0
-                    _Frame30.Size = UDim2.new(0, 274, 0, 51)
-                    _Frame30.Position = UDim2.new(0, 1, 0, 175)
-                    _UICorner36.CornerRadius = UDim.new(0, 5)
-                    _UICorner36.Name = 'slidercorner'
-                    _UICorner36.Parent = _Frame30
-                    _Frame31.Name = 'sliderr'
-                    _Frame31.Parent = _Frame30
-                    _Frame31.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                    _Frame31.Position = UDim2.new(0, 1, 0, 1)
-                    _Frame31.Size = UDim2.new(0, 272, 0, 49)
-                    _UICorner37.CornerRadius = UDim.new(0, 5)
-                    _UICorner37.Name = 'sliderrcorner'
-                    _UICorner37.Parent = _Frame31
-                    _TextLabel14.Name = 'SliderLabel'
-                    _TextLabel14.Parent = _Frame31
-                    _TextLabel14.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    _TextLabel14.BackgroundTransparency = 1
-                    _TextLabel14.Position = UDim2.new(0, 15, 0, 0)
-                    _TextLabel14.Size = UDim2.new(0, 180, 0, 26)
-                    _TextLabel14.Font = Enum.Font.GothamSemibold
-                    _TextLabel14.Text = p190
-                    _TextLabel14.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextLabel14.TextSize = 16
-                    _TextLabel14.TextTransparency = 0
-                    _TextLabel14.TextXAlignment = Enum.TextXAlignment.Left
-                    _Frame32.Name = 'HAHA'
-                    _Frame32.Parent = _Frame31
-                    _Frame32.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    _Frame32.BackgroundTransparency = 1
-                    _Frame32.Size = UDim2.new(0, 255, 0, 29)
-                    _TextButton9.Name = 'AHEHE'
-                    _TextButton9.Parent = _Frame31
-                    _TextButton9.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    _TextButton9.BackgroundTransparency = 1
-                    _TextButton9.Position = UDim2.new(0, 10, 0, 35)
-                    _TextButton9.Size = UDim2.new(0, 255, 0, 5)
-                    _TextButton9.Font = Enum.Font.SourceSans
-                    _TextButton9.Text = ''
-                    _TextButton9.TextColor3 = Color3.fromRGB(0, 0, 0)
-                    _TextButton9.TextSize = 14
-                    _Frame33.Name = 'bar'
-                    _Frame33.Parent = _TextButton9
-                    _Frame33.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                    _Frame33.Size = UDim2.new(0, 255, 0, 5)
-                    _Frame34.Name = 'bar1'
-                    _Frame34.Parent = _Frame33
-                    _Frame34.BackgroundColor3 = _G.Color
-                    _Frame34.BackgroundTransparency = 0
-                    _Frame34.Size = UDim2.new(p193 / p192, 0, 0, 5)
-                    _UICorner38.CornerRadius = UDim.new(0, 5)
-                    _UICorner38.Name = 'bar1corner'
-                    _UICorner38.Parent = _Frame34
-                    _UICorner39.CornerRadius = UDim.new(0, 5)
-                    _UICorner39.Name = 'barcorner'
-                    _UICorner39.Parent = _Frame33
-                    _Frame35.Name = 'circlebar'
-                    _Frame35.Parent = _Frame34
-                    _Frame35.BackgroundColor3 = Color3.fromRGB(225, 225, 225)
-                    _Frame35.Position = UDim2.new(1, -2, 0, -3)
-                    _Frame35.Size = UDim2.new(0, 15, 0, 10)
-                    _UICorner40.CornerRadius = UDim.new(0, 100)
-                    _UICorner40.Parent = _Frame35
-                    _Frame36.Name = 'slidervalue'
-                    _Frame36.Parent = _Frame31
-                    _Frame36.BackgroundColor3 = _G.Color
-                    _Frame36.BackgroundTransparency = 0
-                    _Frame36.Position = UDim2.new(0, 200, 0, 5)
-                    _Frame36.Size = UDim2.new(0, 65, 0, 18)
-                    _UICorner41.CornerRadius = UDim.new(0, 5)
-                    _UICorner41.Name = 'valuecorner'
-                    _UICorner41.Parent = _Frame36
-                    _TextBox2.Parent = _Frame36
-                    _TextBox2.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                    _TextBox2.Position = UDim2.new(0, 1, 0, 1)
-                    _TextBox2.Size = UDim2.new(0, 63, 0, 16)
-                    _TextBox2.Font = Enum.Font.GothamSemibold
-                    _TextBox2.TextColor3 = Color3.fromRGB(225, 225, 225)
-                    _TextBox2.TextSize = 9
-                    _TextBox2.Text = p193
-                    _TextBox2.TextTransparency = 0
-                    _UICorner42.CornerRadius = UDim.new(0, 5)
-                    _UICorner42.Parent = _TextBox2
-
-                    local u212 = game.Players.LocalPlayer:GetMouse()
-                    local _UserInputService3 = game:GetService('UserInputService')
-
-                    if Value == nil then
-                        Value = p193
-
-                        pcall(function()
-                            p194(Value)
-                        end)
-                    end
-
-                    _TextButton9.MouseButton1Down:Connect(function()
-                        Value = math.floor((tonumber(p192) - tonumber(p191)) / 255 * _Frame34.AbsoluteSize.X + tonumber(p191)) or 0
-
-                        pcall(function()
-                            p194(Value)
-                        end)
-
-                        _Frame34.Size = UDim2.new(0, math.clamp(u212.X - _Frame34.AbsolutePosition.X, 0, 255), 0, 5)
-                        _Frame35.Position = UDim2.new(0, math.clamp(u212.X - _Frame34.AbsolutePosition.X - 2, 0, 245), 0, -3)
-                        moveconnection = u212.Move:Connect(function()
-                            _TextBox2.Text = Value
-                            Value = math.floor((tonumber(p192) - tonumber(p191)) / 255 * _Frame34.AbsoluteSize.X + tonumber(p191))
-
-                            pcall(function()
-                                p194(Value)
-                            end)
-
-                            _Frame34.Size = UDim2.new(0, math.clamp(u212.X - _Frame34.AbsolutePosition.X, 0, 255), 0, 5)
-                            _Frame35.Position = UDim2.new(0, math.clamp(u212.X - _Frame34.AbsolutePosition.X - 2, 0, 245), 0, -3)
-                        end)
-                        releaseconnection = _UserInputService3.InputEnded:Connect(function(p214)
-                            if p214.UserInputType == Enum.UserInputType.MouseButton1 then
-                                Value = math.floor((tonumber(p192) - tonumber(p191)) / 255 * _Frame34.AbsoluteSize.X + tonumber(p191))
-
-                                pcall(function()
-                                    p194(Value)
-                                end)
-
-                                _Frame34.Size = UDim2.new(0, math.clamp(u212.X - _Frame34.AbsolutePosition.X, 0, 255), 0, 5)
-                                _Frame35.Position = UDim2.new(0, math.clamp(u212.X - _Frame34.AbsolutePosition.X - 2, 0, 245), 0, -3)
-
-                                moveconnection:Disconnect()
-                                releaseconnection:Disconnect()
-                            end
-                        end)
-                    end)
-
-                    releaseconnection = _UserInputService3.InputEnded:Connect(function(p215)
-                        if p215.UserInputType == Enum.UserInputType.MouseButton1 then
-                            Value = math.floor((tonumber(p192) - tonumber(p191)) / 255 * _Frame34.AbsoluteSize.X + tonumber(p191))
-                            _TextBox2.Text = Value
-                        end
-                    end)
-
-                    _TextBox2.FocusLost:Connect(function()
-                        if p192 < tonumber(_TextBox2.Text) then
-                            _TextBox2.Text = p192
-                        end
-
-                        _Frame34.Size = UDim2.new((_TextBox2.Text or 0) / p192, 0, 0, 5)
-                        _Frame35.Position = UDim2.new(1, -2, 0, -3)
-
-                        local v216 = _TextBox2
-                        local v217 = tostring
-                        local _Text2 = _TextBox2.Text
-
-                        if _Text2 then
-                            _Text2 = math.floor(_TextBox2.Text / p192 * (p192 - p191) + p191)
-                        end
-
-                        v216.Text = v217(_Text2)
-
-                        pcall(p194, _TextBox2.Text)
-                    end)
-                end,
-            }
-        end,
-    }):Window('ThunderZ', '9906600154', Enum.KeyCode.RightControl)
-
-    _ThunderZ:AddToggle('Show Fov', true, function(p220)
-        _G.ShowFov = p220
-    end)
-    _ThunderZ:Button('Reset Player', function()
-        Playersaimbot = nil
-        PlayersPosition = nil
-        _ImageLabel3.Image = ''
-        _TextLabel4.Text = 'Level | [ None ]'
-        _TextLabel6.Text = 'Name | [ None ]'
-        _TextLabel5.Text = 'Health | [ None ]'
-    end)
-    _ThunderZ:AddButton('Instant Teleport To Castle on Sea', function()
-        game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-5056.90967, 314.541382, -3156.48413, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-    end)
-    _ThunderZ:Toggle('Lock Player', _G.LockPlayer, function(p221)
-        _G.LockPlayer = p221
-    end)
-
-    local _Circle = Drawing.new('Circle')
-
-    _Circle.Thickness = 2
-    _Circle.NumSides = 100
-    _Circle.Filled = false
-    _Circle.Transparency = 1
-    _Circle.Color = Color3.fromRGB(0, 225, 225)
-
-    game:GetService('RunService').Stepped:Connect(function()
-        _Circle.Radius = Fov * 6 / 2
-        _Circle.Thickness = 2
-        _Circle.NumSides = 100
-        _Circle.Position = game:GetService('UserInputService'):GetMouseLocation()
-
-        if _G.ShowFov then
-            _Circle.Visible = true
-        else
-            _Circle.Visible = false
+    return bestHRP
+end
+
+local function GetNearestBunnyNPC()
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    local bestDist, bestHRP = math.huge, nil
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not enemies then return nil end
+    for _, v in ipairs(enemies:GetChildren()) do
+        local hrp = v:FindFirstChild("HumanoidRootPart")
+        local hum = v:FindFirstChild("Humanoid")
+        if hrp and hum and hum.Health > 0 then
+            local d = (hrp.Position - myHRP.Position).Magnitude
+            if d < bestDist then
+                bestDist = d; bestHRP = hrp
+            end
         end
-    end)
-    spawn(function()
-        pcall(function()
-            while wait() do
-                local v223, v224, v225 = pairs(u76:GetPlayers())
+    end
+    return bestHRP
+end
 
-                while true do
-                    local v226
+local function GetBunnyTarget()
+    if Settings.Bunny.TargetMode == "NPC" then
+        return GetNearestBunnyNPC()
+    else
+        return GetNearestBunnyPlayer()
+    end
+end
 
-                    v225, v226 = v223(v224, v225)
+-- ============================================================
+--  WINDOW SETUP
+-- ============================================================
+local Window = WindUI:CreateWindow({
+    Title       = "Bunny Hub",
+    Author      = "by rhoscript",
+    Folder      = "BunnyHub",
+    Size        = UDim2.fromOffset(680, 620), 
+    Theme       = "Dark",
+    Resizable   = true,
+    Transparent = true, 
+})
 
-                    if v225 == nil then
-                        break
-                    end
-                    if (game.Workspace.Characters:FindFirstChild(v226.Name) or game.Workspace.Characters:FindFirstChild(v226.DisplayName)) and v226.Character:FindFirstChild('HumanoidRootPart') then
-                        local v227 = _CurrentCamera:WorldToViewportPoint(v226.Character.HumanoidRootPart.Position)
-                        local _magnitude = (Vector2.new(v227.X, v227.Y) - Vector2.new(u75.X, u75.Y)).magnitude
+Window:SetToggleKey(Enum.KeyCode.K)
 
-                        if _magnitude < (Fov * 6 - 8) / 2 and _magnitude < math.huge and ((v226.Character.HumanoidRootPart.Position - game:GetService('Players').LocalPlayer.Character.HumanoidRootPart.Position).magnitude <= 1000 and (v226.Name ~= game.Players.LocalPlayer.Name and _G.LockPlayer == false)) then
-                            Playersaimbot = v226.Name
-                            PlayersPosition = v226.Character.HumanoidRootPart.Position
-                        end
-                    end
-                end
+-- ============================================================
+--  TABS
+-- ============================================================
+local HomeTab     = Window:Tab({ Title = "Home",     Icon = "home"      })
+local BunnyTab    = Window:Tab({ Title = "Combat",   Icon = "swords"    }) 
+local AimlockTab  = Window:Tab({ Title = "Aimlock",  Icon = "crosshair" })
+local ESPTab      = Window:Tab({ Title = "ESP",      Icon = "eye"       })
+local PlayerTab   = Window:Tab({ Title = "Player",   Icon = "user"      })
+local VisualsTab  = Window:Tab({ Title = "Visuals",  Icon = "palette"   })
+local SettingsTab = Window:Tab({ Title = "Settings", Icon = "settings"  })
+
+-- ============================================================
+--  HOME TAB
+-- ============================================================
+local HomeWelcome = HomeTab:Section({ Title = "Welcome", Opened = true })
+HomeWelcome:Paragraph({
+    Title = "Bunny Hub Mobile Edition",
+    Desc  = "Welcome to Bunny Hub. This menu features a fully transparent dark-mode UI, mobile optimizations, and powerful combat systems including Silent Aim, Smart Aimlock, and Fast Attack.",
+    Color = "Blue",
+})
+
+-- ============================================================
+--  BUNNY TAB (Custom Combat Features)
+-- ============================================================
+local BunTarget = BunnyTab:Section({ Title = "Targeting (For Silent/Fast Aim)", Opened = true })
+BunTarget:Dropdown({
+    Title = "Target Mode",
+    Values = {"Players", "NPC"},
+    Value = "Players",
+    Callback = function(v) Settings.Bunny.TargetMode = v end
+})
+
+local BunCombat = BunnyTab:Section({ Title = "Combat Hacks", Opened = true })
+BunCombat:Toggle({
+    Title = "Silent Aim (Magic Bullets)",
+    Desc  = "Projectiles automatically hit the target without snapping your camera.",
+    Value = false,
+    Callback = function(v) Settings.Bunny.SilentAim = v end
+})
+BunCombat:Toggle({
+    Title = "Aimbot Gun",
+    Desc  = "Auto fires guns at the nearest target.",
+    Value = false,
+    Callback = function(v) Settings.Bunny.AimbotGun = v end
+})
+BunCombat:Toggle({
+    Title = "Aimbot Skill",
+    Desc  = "Auto fires skills at the nearest target.",
+    Value = false,
+    Callback = function(v) Settings.Bunny.AimbotSkill = v end
+})
+BunCombat:Toggle({
+    Title = "Fast Attack (M1)",
+    Desc  = "Spams click attacks automatically.",
+    Value = false,
+    Callback = function(v) Settings.Bunny.FastAttack = v end
+})
+BunCombat:Slider({
+    Title = "Fast Attack Delay",
+    Step  = 0.05,
+    Value = { Min = 0, Max = 1, Default = 0 },
+    Callback = function(v) Settings.Bunny.FastAtkDelay = v end
+})
+
+local BunAuto = BunnyTab:Section({ Title = "Auto Features", Opened = true })
+BunAuto:Toggle({ Title = "Auto Haki (Buso)", Value = false, Callback = function(v) Settings.Bunny.AutoHaki = v end })
+BunAuto:Toggle({ Title = "Auto V3", Value = false, Callback = function(v) Settings.Bunny.AutoV3 = v end })
+BunAuto:Toggle({ Title = "Auto V4", Value = false, Callback = function(v) Settings.Bunny.AutoV4 = v end })
+
+local BunWorld = BunnyTab:Section({ Title = "World & Player", Opened = true })
+BunWorld:Toggle({ Title = "Walk on Water", Value = false, Callback = function(v) Settings.Bunny.WalkWater = v end })
+BunWorld:Toggle({ Title = "Safe Mode", Desc = "Teleports you to the sky when HP is low.", Value = false, Callback = function(v) Settings.Bunny.SafeMode = v end })
+BunWorld:Slider({ Title = "Safe HP Threshold %", Step = 1, Value = {Min = 5, Max = 80, Default = 30}, Callback = function(v) Settings.Bunny.SafeHPThresh = v end })
+
+BunWorld:Button({
+    Title = "Get Click-TP Tool",
+    Callback = function()
+        local tool = Instance.new("Tool", LocalPlayer.Backpack)
+        tool.Name = "Bunni TP"; tool.RequiresHandle = false
+        tool.Activated:Connect(function()
+            local m = LocalPlayer:GetMouse()
+            if m.Hit and LocalPlayer.Character then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameNew(m.Hit.Position + Vector3New(0, 5, 0))
             end
         end)
-    end)
-    spawn(function()
-        pcall(function()
-            while wait() do
-                if not game:GetService('Players').LocalPlayer.Character:FindFirstChild('HasBuso') then
-                    game:GetService('ReplicatedStorage').Remotes.CommF_:InvokeServer('Buso')
-                end
-            end
-        end)
-    end)
-
-    function isnil(p229)
-        return p229 == nil
+        Notify("Tool Added", "Click TP in backpack!", 2)
     end
-
-    local function u231(p230)
-        return math.floor(tonumber(p230) + 0.5)
-    end
-
-    Number = math.random(1, 1000000)
-
-    spawn(function()
-        while wait() do
+})
+BunWorld:Button({
+    Title = "Apply High Performance (FPS Boost)",
+    Callback = function()
+        settings().Rendering.QualityLevel = "Level01"
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        for _, e in ipairs(Lighting:GetChildren()) do if e:IsA("PostEffect") then e:Destroy() end end
+        for _, v in ipairs(game:GetDescendants()) do
             pcall(function()
-                local v232, v233, v234 = pairs(game:GetService('Workspace'):GetChildren())
-
-                while true do
-                    local u235
-
-                    v234, u235 = v232(v233, v234)
-
-                    if v234 == nil then
-                        break
-                    end
-
-                    pcall(function()
-                        if getgenv().setting.DevilESP then
-                            if string.find(u235.Name, 'Fruit') then
-                                if u235.Handle:FindFirstChild('NameEsp' .. Number) then
-                                    if u235.Name ~= 'Spin Fruit' then
-                                        if u235.Name ~= 'Bomb Fruit' then
-                                            if u235.Name ~= 'Spike Fruit' then
-                                                if u235.Name ~= 'Chop Fruit' then
-                                                    if u235.Name ~= 'Spring Fruit' then
-                                                        if u235.Name ~= 'Kilo Fruit' then
-                                                            if u235.Name ~= 'Bird: Falcon Fruit' then
-                                                                if u235.Name ~= 'Smoke Fruit' then
-                                                                    if u235.Name ~= 'Flame Fruit' then
-                                                                        if u235.Name ~= 'Ice Fruit' then
-                                                                            if u235.Name ~= 'Dark Fruit' then
-                                                                                if u235.Name ~= 'Sand Fruit' then
-                                                                                    if u235.Name ~= 'Revive Fruit' then
-                                                                                        if u235.Name ~= 'Diamond Fruit' then
-                                                                                            if u235.Name ~= 'Light Fruit' then
-                                                                                                if u235.Name ~= 'Love Fruit' then
-                                                                                                    if u235.Name ~= 'Rubber Fruit' then
-                                                                                                        if u235.Name ~= 'Barrier Fruit' then
-                                                                                                            if u235.Name ~= 'Magma Fruit' then
-                                                                                                                if u235.Name ~= 'Door Fruit' then
-                                                                                                                    if u235.Name ~= 'Quake Fruit' then
-                                                                                                                        if u235.Name ~= 'Human: Buddha Fruit' then
-                                                                                                                            if u235.Name ~= 'String Fruit' then
-                                                                                                                                if u235.Name ~= 'Bird: Phoenix Fruit' then
-                                                                                                                                    if u235.Name ~= 'Rumble Fruit' then
-                                                                                                                                        if u235.Name ~= 'Paw Fruit' then
-                                                                                                                                            if u235.Name ~= 'Gravity Fruit' then
-                                                                                                                                                if u235.Name ~= 'Dough Fruit' then
-                                                                                                                                                    if u235.Name ~= 'Venom Fruit' then
-                                                                                                                                                        if u235.Name ~= 'Shadow Fruit' then
-                                                                                                                                                            if u235.Name ~= 'Control Fruit' then
-                                                                                                                                                                if u235.Name ~= 'Soul Fruit' then
-                                                                                                                                                                    if u235.Name ~= 'Dragon Fruit' then
-                                                                                                                                                                        if u235.Name ~= 'Leopard Fruit' then
-                                                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(0, 225, 225)
-                                                                                                                                                                        else
-                                                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(208, 152, 0)
-                                                                                                                                                                        end
-                                                                                                                                                                    else
-                                                                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-                                                                                                                                                                    end
-                                                                                                                                                                else
-                                                                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(226, 155, 64)
-                                                                                                                                                                end
-                                                                                                                                                            else
-                                                                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(128, 187, 219)
-                                                                                                                                                            end
-                                                                                                                                                        else
-                                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(167, 94, 155)
-                                                                                                                                                        end
-                                                                                                                                                    else
-                                                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(75, 0, 130)
-                                                                                                                                                    end
-                                                                                                                                                else
-                                                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(191, 162, 144)
-                                                                                                                                                end
-                                                                                                                                            else
-                                                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(230, 230, 250)
-                                                                                                                                            end
-                                                                                                                                        else
-                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                                                                                                                        end
-                                                                                                                                    else
-                                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(55, 197, 216)
-                                                                                                                                    end
-                                                                                                                                else
-                                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(55, 197, 216)
-                                                                                                                                end
-                                                                                                                            else
-                                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                                                                                                            end
-                                                                                                                        else
-                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 234, 0)
-                                                                                                                        end
-                                                                                                                    else
-                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(128, 187, 219)
-                                                                                                                    end
-                                                                                                                else
-                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(0, 100, 0)
-                                                                                                                end
-                                                                                                            else
-                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(207, 16, 32)
-                                                                                                            end
-                                                                                                        else
-                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(50, 205, 50)
-                                                                                                        end
-                                                                                                    else
-                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 20, 147)
-                                                                                                    end
-                                                                                                else
-                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(247, 179, 205)
-                                                                                                end
-                                                                                            else
-                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 255, 102)
-                                                                                            end
-                                                                                        else
-                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(185, 242, 255)
-                                                                                        end
-                                                                                    else
-                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(20, 190, 33)
-                                                                                    end
-                                                                                else
-                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(205, 170, 109)
-                                                                                end
-                                                                            else
-                                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(48, 25, 52)
-                                                                            end
-                                                                        else
-                                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(200, 233, 233)
-                                                                        end
-                                                                    else
-                                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 119, 0)
-                                                                    end
-                                                                else
-                                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                                                end
-                                                            else
-                                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(105, 64, 40)
-                                                            end
-                                                        else
-                                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(90, 90, 90)
-                                                        end
-                                                    else
-                                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(163, 162, 165)
-                                                    end
-                                                else
-                                                    u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                    u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(163, 162, 165)
-                                                end
-                                            else
-                                                u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                                u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(163, 162, 165)
-                                            end
-                                        else
-                                            u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                            u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(124, 92, 70)
-                                        end
-                                    else
-                                        u235.Handle['NameEsp' .. Number].TextLabel.Text = u235.Name .. '   \n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                        u235.Handle['NameEsp' .. Number].TextLabel.TextColor3 = Color3.fromRGB(82, 124, 174)
-                                    end
-                                else
-                                    local _BillboardGui = Instance.new('BillboardGui', u235.Handle)
-
-                                    _BillboardGui.Name = 'NameEsp' .. Number
-                                    _BillboardGui.ExtentsOffset = Vector3.new(0, 1, 0)
-                                    _BillboardGui.Size = UDim2.new(1, 200, 1, 30)
-                                    _BillboardGui.Adornee = u235.Handle
-                                    _BillboardGui.AlwaysOnTop = true
-
-                                    local _TextLabel15 = Instance.new('TextLabel', _BillboardGui)
-
-                                    _TextLabel15.Font = 'GothamBold'
-                                    _TextLabel15.FontSize = 'Size14'
-                                    _TextLabel15.TextWrapped = true
-                                    _TextLabel15.Size = UDim2.new(1, 0, 1, 0)
-                                    _TextLabel15.TextYAlignment = 'Top'
-                                    _TextLabel15.BackgroundTransparency = 1
-                                    _TextLabel15.TextStrokeTransparency = 0.5
-                                    _TextLabel15.TextColor3 = Color3.fromRGB(0, 225, 225)
-                                    _TextLabel15.Text = u235.Name .. '\n' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - u235.Handle.Position).Magnitude / 3) .. ' M'
-                                end
-                            end
-                        elseif u235.Handle:FindFirstChild('NameEsp' .. Number) then
-                            u235.Handle:FindFirstChild('NameEsp' .. Number):Destroy()
-                        end
-                    end)
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                    v.Enabled = false
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    v.Transparency = 1
+                elseif v:IsA("BasePart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                    v.CastShadow = false
                 end
             end)
         end
+        Notify("High Performance", "FPS Boost Applied!", 2)
+    end
+})
+
+-- ============================================================
+--  AIMLOCK, ESP, PLAYER, VISUALS, SETTINGS
+-- ============================================================
+local AimSection = AimlockTab:Section({ Title = "Aimlock Control", Opened = true })
+AimSection:Toggle({ Title = "Enable Aimlock", Flag = "AimlockEnabled", Value = false, Callback = function(v) Settings.Aimlock.Enabled = v end })
+AimSection:Keybind({ Title = "Aimlock Key", Flag = "AimlockKeybind", Value = "RightClick", Callback = function(v) Settings.Aimlock.Keybind = v end })
+AimSection:Toggle({ Title = "Wall Check", Flag = "AimlockWallCheck", Value = true, Callback = function(v) Settings.Aimlock.WallCheck = v end })
+AimSection:Toggle({ Title = "Team Check", Flag = "AimlockTeamCheck", Value = true, Callback = function(v) Settings.Aimlock.TeamCheck = v end })
+
+local AimTuning = AimlockTab:Section({ Title = "Aim Tuning", Opened = true })
+AimTuning:Dropdown({ Title = "Aim Mode", Flag = "AimlockAimMode", Values = { "Smart", "Chaos", "Head", "Torso", "Limbs", "HRP" }, Value = "Smart", Callback = function(v) Settings.Aimlock.AimMode = v end })
+AimTuning:Toggle({ Title = "Enable Prediction", Flag = "AimlockPredictionEnabled", Value = true, Callback = function(v) Settings.Aimlock.PredictionEnabled = v end })
+AimTuning:Slider({ Title = "Prediction Strength", Flag = "AimlockPrediction", Step = 0.005, Value = { Min = 0, Max = 0.3, Default = 0.135 }, Callback = function(v) Settings.Aimlock.Prediction = v end })
+
+local ESPCore = ESPTab:Section({ Title = "ESP Core", Opened = true })
+ESPCore:Toggle({ Title = "Enable ESP", Flag = "ESPEnabled", Value = false, Callback = function(v) Settings.Visuals.ESPEnabled = v end })
+ESPCore:Toggle({ Title = "Team Check", Flag = "ESPTeamCheck", Value = true, Callback = function(v) Settings.Visuals.TeamCheck = v end })
+ESPCore:Toggle({ Title = "ESP Boxes", Value = true, Callback = function(v) Settings.Visuals.ESPBoxes = v end })
+ESPCore:Toggle({ Title = "Show Names", Value = true, Callback = function(v) Settings.Visuals.ESPNames = v end })
+ESPCore:Toggle({ Title = "Health Bar", Value = true, Callback = function(v) Settings.Visuals.HealthBar = v end })
+ESPCore:Toggle({ Title = "Enable Chams", Value = false, Callback = function(v) Settings.Visuals.ChamsEnabled = v end })
+
+local SpeedSection = PlayerTab:Section({ Title = "Walk Speed & Jump Power", Opened = true })
+SpeedSection:Toggle({ Title = "Enable Walk Speed", Value = false, Callback = function(v) Settings.Player.WalkSpeedEnabled = v end })
+SpeedSection:Slider({ Title = "Walk Speed", Step = 1, Value = { Min = 16, Max = 250, Default = 16 }, Callback = function(v) Settings.Player.WalkSpeed = v end })
+SpeedSection:Toggle({ Title = "Enable Jump Power", Value = false, Callback = function(v) Settings.Player.JumpPowerEnabled = v end })
+SpeedSection:Slider({ Title = "Jump Power", Step = 5, Value = { Min = 50, Max = 300, Default = 50 }, Callback = function(v) Settings.Player.JumpPower = v end })
+
+local FOVSection = VisualsTab:Section({ Title = "FOV Circle", Opened = true })
+FOVSection:Toggle({ Title = "Show FOV Circle", Value = true, Callback = function(v) Settings.FOV.Visible = v end })
+FOVSection:Slider({ Title = "FOV Radius", Step = 5, Value = { Min = 30, Max = 600, Default = 150 }, Callback = function(v) Settings.FOV.Radius = v end })
+
+local ConfigSection = SettingsTab:Section({ Title = "Config System", Opened = true })
+local BunnyConfig = Window.ConfigManager:CreateConfig("bunnyhub_config")
+BunnyConfig:Register(Window)
+
+ConfigSection:Button({ 
+    Title = "Save Config", 
+    Callback = function() BunnyConfig:Save(); Notify("Config", "Saved!") end 
+})
+ConfigSection:Button({ 
+    Title = "Load Config", 
+    Callback = function() BunnyConfig:Load(); Notify("Config", "Loaded!") end 
+})
+ConfigSection:Button({ 
+    Title = "Reset Config", 
+    Callback = function() 
+        pcall(function()
+            if delfile then
+                delfile("BunnyHub/bunnyhub_config.txt")
+                delfile("BunnyHub/bunnyhub_config.json")
+            end
+        end)
+        Notify("Config", "Config reset! Re-execute script to apply defaults.") 
+    end 
+})
+
+-- ============================================================
+--  DRAWING OBJECTS & ESP LOGIC
+-- ============================================================
+local FOVRing = Drawing.new("Circle")
+FOVRing.Visible = false
+FOVRing.Thickness = 1.5
+FOVRing.Filled = false
+
+local ChamsFolder = Instance.new("Folder")
+ChamsFolder.Name = "BunnyChams"
+ChamsFolder.Parent = CoreGui
+local ESPObjects = {}
+local ActivePlayers = {}
+
+local function CreateESP(player)
+    pcall(function()
+        local esp = {
+            Box = Drawing.new("Square"),
+            Name = Drawing.new("Text"),
+            BarBG = Drawing.new("Square"),
+            BarFG = Drawing.new("Square"),
+            Highlight = Instance.new("Highlight", ChamsFolder),
+            _isVisible = false,
+        }
+        esp.Box.Thickness = 1.5; esp.Box.Filled = false
+        esp.Name.Size = 14; esp.Name.Center = true; esp.Name.Outline = true; esp.Name.Color = Color3RGB(255,255,255)
+        esp.BarBG.Filled = true; esp.BarBG.Color = Color3RGB(20,20,20)
+        esp.BarFG.Filled = true
+        esp.Highlight.Enabled = false
+        ESPObjects[player] = esp
     end)
-    spawn(function()
-        while wait() do
-            pcall(function()
-                if getgenv().setting.ESPPlayer then
-                    local v238, v239, v240 = pairs(game:GetService('Players'):GetPlayers())
+end
 
-                    while true do
-                        local v241
+for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then CreateESP(p) end end
+Players.PlayerAdded:Connect(function(p) CreateESP(p) end)
+Players.PlayerRemoving:Connect(function(p)
+    local e = ESPObjects[p]
+    if e then pcall(function() e.Box:Remove(); e.Name:Remove(); e.BarBG:Remove(); e.BarFG:Remove(); e.Highlight:Destroy() end) end
+    ESPObjects[p] = nil
+end)
 
-                        v240, v241 = v238(v239, v240)
+-- ============================================================
+--  BUNNY HUB BACKGROUND LOOPS & HOOKS
+-- ============================================================
 
-                        if v240 == nil then
-                            break
-                        end
-                        if not isnil(v241.Character) then
-                            if v241.Character.Head:FindFirstChild('NameEsp' .. v241.Name) then
-                                v241.Character.Head['NameEsp' .. v241.Name].ESP.Text = v241.Name .. ' \n[ ' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - v241.Character.Head.Position).Magnitude / 3) .. ' M ]'
-                                v241.Character.Head:FindFirstChild('NameEsp' .. v241.Name).ESP.TextTransparency = 0
-                            else
-                                local _BillboardGui2 = Instance.new('BillboardGui')
-                                local _TextLabel16 = Instance.new('TextLabel')
+-- Gun Tracker
+spawn(function()
+    while wait(0.5) do pcall(function()
+        local function scan(c)
+            for _, v in pairs(c:GetChildren()) do
+                if v:IsA("Tool") and v:FindFirstChild("RemoteFunctionShoot") then
+                    SelectWeaponGun = v.Name
+                end
+            end
+        end
+        scan(LocalPlayer.Backpack)
+        if LocalPlayer.Character then scan(LocalPlayer.Character) end
+    end) end
+end)
 
-                                _BillboardGui2.Parent = v241.Character.Head
-                                _BillboardGui2.Name = 'NameEsp' .. v241.Name
-                                _BillboardGui2.ExtentsOffset = Vector3.new(0, 1, 0)
-                                _BillboardGui2.Size = UDim2.new(1, 200, 1, 30)
-                                _BillboardGui2.Adornee = v241.Character.Head
-                                _BillboardGui2.AlwaysOnTop = true
-                                _TextLabel16.Name = 'ESP'
-                                _TextLabel16.Parent = _BillboardGui2
-                                _TextLabel16.TextTransparency = 0
-                                _TextLabel16.BackgroundTransparency = 1
-                                _TextLabel16.Size = UDim2.new(0, 200, 0, 30)
-                                _TextLabel16.Position = UDim2.new(0, 25, 0, 0)
-                                _TextLabel16.Font = Enum.Font.Gotham
-                                _TextLabel16.Text = v241.Name .. ' ' .. ' \n[ ' .. u231((game:GetService('Players').LocalPlayer.Character.Head.Position - v241.Character.Head.Position).Magnitude / 3) .. ' M ]'
+-- Auto Haki
+spawn(function()
+    while task.wait(0.5) do pcall(function()
+        if not Settings.Bunny.AutoHaki then return end
+        local char = LocalPlayer.Character
+        if char and not char:FindFirstChild("HasBuso") then
+            ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
+        end
+    end) end
+end)
 
-                                if v241.Team ~= game:GetService('Players').LocalPlayer.Team then
-                                    _TextLabel16.TextColor3 = Color3.new(255, 255, 255)
-                                else
-                                    _TextLabel16.TextColor3 = Color3.new(255, 255, 255)
-                                end
+-- Auto V3 / V4 (Mobile Fixed)
+spawn(function()
+    while task.wait(0.5) do 
+        pcall(function()
+            if Settings.Bunny.AutoV3 then ReplicatedStorage.Remotes.CommE:FireServer("ActivateAbility") end
+            if Settings.Bunny.AutoV4 then ReplicatedStorage.Remotes.CommE:FireServer("Awakening") end
+        end) 
+    end
+end)
 
-                                _TextLabel16.TextSize = 14
-                                _TextLabel16.TextStrokeTransparency = 0.5
-                                _TextLabel16.TextWrapped = true
-                            end
-                        end
+-- Walk On Water
+spawn(function()
+    while wait(0.5) do pcall(function()
+        local plane = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("WaterBase-Plane")
+        if plane then
+            if Settings.Bunny.WalkWater then
+                plane.Size = Vector3New(plane.Size.X, 112, plane.Size.Z)
+            else
+                plane.Size = Vector3New(plane.Size.X, 80, plane.Size.Z)
+            end
+        end
+    end) end
+end)
+
+-- Safe Mode
+spawn(function()
+    while task.wait(0.2) do pcall(function()
+        if not Settings.Bunny.SafeMode then return end
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hum and hrp then
+            local thresh = (Settings.Bunny.SafeHPThresh / 100) * hum.MaxHealth
+            if hum.Health <= thresh then
+                hrp.CFrame = hrp.CFrame + Vector3New(0, 200, 0)
+            end
+        end
+    end) end
+end)
+
+-- Fast Attack
+spawn(function()
+    local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+    local RegAtk = Net:WaitForChild("RE/RegisterAttack")
+    local RegHit = Net:WaitForChild("RE/RegisterHit")
+    local function Collect(folder)
+        local list, base = {}, nil
+        if not folder then return list, base end
+        for _, e in ipairs(folder:GetChildren()) do
+            local head = e:FindFirstChild("Head")
+            if head and e:FindFirstChild("Humanoid") and e.Humanoid.Health > 0 and e ~= LocalPlayer.Character then
+                if LocalPlayer:DistanceFromCharacter(head.Position) < 100 then
+                    table.insert(list, {e, head}); base = head
+                end
+            end
+        end
+        return list, base
+    end
+    while true do
+        if not Settings.Bunny.FastAttack then task.wait(0.05); continue end
+        if Settings.Bunny.FastAtkDelay > 0 then task.wait(Settings.Bunny.FastAtkDelay) end
+        local char = LocalPlayer.Character; if not char then task.wait(0.05); continue end
+        local eList, b1 = Collect(workspace:FindFirstChild("Enemies"))
+        local cList, b2 = Collect(workspace:FindFirstChild("Characters"))
+        for _, d in ipairs(cList) do table.insert(eList, d) end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool and tool:FindFirstChild("LeftClickRemote") then
+            for _, d in ipairs(eList) do
+                local dir = (d[1].HumanoidRootPart.Position - char:GetPivot().Position).Unit
+                pcall(function() tool.LeftClickRemote:FireServer(dir, 1) end)
+            end
+        elseif #eList > 0 then
+            pcall(function() RegAtk:FireServer(0) end)
+            pcall(function() RegHit:FireServer(b1 or b2, eList) end)
+        end
+        task.wait(0)
+    end
+end)
+
+-- Silent Aim (Mobile & Damage Fixed)
+local Mouse = LocalPlayer:GetMouse()
+local _raw = getrawmetatable(game)
+local _origNC = _raw.__namecall
+local _origIndex = _raw.__index
+setreadonly(_raw, false)
+
+_raw.__index = newcclosure(function(t, k)
+    if Settings.Bunny.SilentAim and not checkcaller() and t == Mouse then
+        if k == "Hit" then
+            local tHRP = GetBunnyTarget()
+            if tHRP then return CFrameNew(tHRP.Position) end
+        elseif k == "Target" then
+            local tHRP = GetBunnyTarget()
+            if tHRP then return tHRP end
+        end
+    end
+    return _origIndex(t, k)
+end)
+
+_raw.__namecall = newcclosure(function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+    
+    if Settings.Bunny.SilentAim and not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
+        if self.Name == "RemoteEvent" or self.Name == "RemoteFunctionShoot" or self.Name == "LeftClickRemote" then
+            local tHRP = GetBunnyTarget()
+            if tHRP then
+                for i, v in ipairs(args) do
+                    if typeof(v) == "Vector3" then 
+                        args[i] = tHRP.Position
+                    elseif typeof(v) == "CFrame" then 
+                        args[i] = CFrameNew(v.Position, tHRP.Position) 
+                    end
+                end
+            end
+        end
+    end
+    return _origNC(self, unpack(args))
+end)
+setreadonly(_raw, true)
+
+-- Aimbot Gun / Skill
+RunService.Heartbeat:Connect(function()
+    if Settings.Bunny.AimbotGun then
+        local hrp = GetBunnyTarget(); if hrp and LocalPlayer.Character then
+            local gun = LocalPlayer.Character:FindFirstChild(SelectWeaponGun)
+            if gun and gun:FindFirstChild("RemoteFunctionShoot") then
+                pcall(function() gun.RemoteFunctionShoot:InvokeServer(hrp.Position, hrp) end)
+            end
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if Settings.Bunny.AimbotSkill then
+        local hrp = GetBunnyTarget(); if hrp and LocalPlayer.Character then
+            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool and LocalPlayer.Character:FindFirstChild(tool.Name) then
+                local t = LocalPlayer.Character[tool.Name]
+                if t:FindFirstChild("MousePos") then
+                    pcall(function() t.RemoteEvent:FireServer(hrp.Position) end)
+                end
+            end
+        end
+    end
+end)
+
+-- ============================================================
+--  MAIN LOOP (FOV, ESP, Player Mods)
+-- ============================================================
+local function GetHealthColor(pct)
+    if pct > 0.60 then return Color3RGB(100, 255, 50) end
+    if pct > 0.20 then return Color3RGB(255, 130, 0) end
+    return Color3RGB(255, 50, 50)
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    -- FOV Ring
+    local fovPos = Settings.FOV.FollowCursor and UserInputService:GetMouseLocation() or Vector2New(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
+    FOVRing.Position = fovPos
+    FOVRing.Radius = Settings.FOV.Radius
+    FOVRing.Visible = Settings.FOV.Visible
+    FOVRing.Color = Settings.FOV.Color
+
+    -- Player Mods
+    local myChar = LocalPlayer.Character
+    if myChar then
+        local hum = myChar:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if Settings.Player.WalkSpeedEnabled then hum.WalkSpeed = Settings.Player.WalkSpeed end
+            if Settings.Player.JumpPowerEnabled then hum.JumpPower = Settings.Player.JumpPower end
+        end
+    end
+
+    -- ESP rendering
+    if Settings.Visuals.ESPEnabled or Settings.Visuals.ChamsEnabled then
+        for p, esp in pairs(ESPObjects) do
+            local char = p.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            if root and hum and hum.Health > 0 and (p.Team ~= LocalPlayer.Team or not Settings.Visuals.TeamCheck) then
+                local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                
+                if Settings.Visuals.ChamsEnabled then
+                    esp.Highlight.Adornee = char
+                    esp.Highlight.Enabled = true
+                    esp.Highlight.FillColor = Settings.Visuals.ChamsFillColor
+                    esp.Highlight.OutlineColor = Settings.Visuals.ChamsOutlineColor
+                else
+                    esp.Highlight.Enabled = false
+                end
+
+                if Settings.Visuals.ESPEnabled and onScreen and pos.Z < Settings.Visuals.MaxESPDistance then
+                    local head = char:FindFirstChild("Head")
+                    if head then
+                        local headPos = Camera:WorldToViewportPoint(head.Position + Vector3New(0,0.5,0))
+                        local boxH = mathAbs(headPos.Y - (pos.Y + (headPos.Y - pos.Y)*3))
+                        local boxW = boxH * 0.55
+                        
+                        esp.Box.Visible = Settings.Visuals.ESPBoxes
+                        esp.Box.Size = Vector2New(boxW, boxH)
+                        esp.Box.Position = Vector2New(pos.X - boxW/2, headPos.Y)
+                        esp.Box.Color = Settings.Visuals.VisColor
+
+                        esp.Name.Visible = Settings.Visuals.ESPNames
+                        esp.Name.Text = p.DisplayName
+                        esp.Name.Position = Vector2New(pos.X, headPos.Y - 16)
+
+                        local hpPct = hum.Health / (hum.MaxHealth > 0 and hum.MaxHealth or 100)
+                        esp.BarBG.Visible = Settings.Visuals.HealthBar
+                        esp.BarBG.Size = Vector2New(3, boxH)
+                        esp.BarBG.Position = Vector2New(pos.X - boxW/2 - 5, headPos.Y)
+                        
+                        esp.BarFG.Visible = Settings.Visuals.HealthBar
+                        esp.BarFG.Size = Vector2New(3, boxH * hpPct)
+                        esp.BarFG.Position = Vector2New(pos.X - boxW/2 - 5, headPos.Y + boxH - (boxH * hpPct))
+                        esp.BarFG.Color = GetHealthColor(hpPct)
                     end
                 else
-                    local v244, v245, v246 = pairs(game:GetService('Players'):GetPlayers())
-
-                    while true do
-                        local v247
-
-                        v246, v247 = v244(v245, v246)
-
-                        if v246 == nil then
-                            break
-                        end
-                        if v247.Character.Head:FindFirstChild('NameEsp' .. v247.Name) then
-                            v247.Character.Head:FindFirstChild('NameEsp' .. v247.Name).ESP.TextTransparency = 1
-                        end
-                    end
+                    esp.Box.Visible = false; esp.Name.Visible = false; esp.BarBG.Visible = false; esp.BarFG.Visible = false
                 end
-            end)
-        end
-    end)
-    spawn(function()
-        game.GetService(game, 'RunService').RenderStepped:Connect(function()
-            if Playersaimbot ~= nil then
-                local v248, v249, v250 = pairs(game.Players:GetChildren())
-
-                while true do
-                    local v251
-
-                    v250, v251 = v248(v249, v250)
-
-                    if v250 == nil then
-                        break
-                    end
-                    if v251.Name == Playersaimbot and game.Workspace.Characters:FindFirstChild(v251.Name) then
-                        _TextLabel4.Text = 'Level  | [ ' .. math.floor(v251.Data.Level.Value) .. ' ]'
-                        _TextLabel6.Text = 'Name | ' .. v251.Name
-                        _TextLabel5.Text = 'Health | [ ' .. math.floor(v251.Character.Humanoid.Health) .. '/' .. v251.Character.Humanoid.MaxHealth .. ' ]'
-
-                        local u252 = v251.Character.Humanoid.Health / v251.Character.Humanoid.MaxHealth
-
-                        pcall(function()
-                            _Frame12:TweenSize(UDim2.new(u252, 0, 0, 8), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15)
-                        end)
-
-                        _ImageLabel3.Image = game:GetService('Players'):GetUserThumbnailAsync(v251.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
-                    end
-                end
-            end
-        end)
-    end)
-    spawn(function()
-        game.GetService(game, 'RunService').RenderStepped:Connect(function()
-            if _G.LockPlayer then
-                _TextLabel7.Text = 'Lock Players | ON'
-                _G.LockPlayer = true
             else
-                _TextLabel7.Text = 'Lock Players | OFF'
-                _G.LockPlayer = false
-            end
-        end)
-    end)
-    spawn(function()
-        while wait() do
-            local v253, v254, v255 = pairs(game.Players:GetChildren())
-
-            while true do
-                local v256
-
-                v255, v256 = v253(v254, v255)
-
-                if v255 == nil then
-                    break
-                end
-                if v256.Name == Playersaimbot then
-                    PlayersPosition = v256.Character.HumanoidRootPart.Position
-                end
+                esp.Box.Visible = false; esp.Name.Visible = false; esp.BarBG.Visible = false; esp.BarFG.Visible = false; esp.Highlight.Enabled = false
             end
         end
-    end)
-    spawn(function()
-        local v257 = getrawmetatable(game)
-        local ___namecall = v257.__namecall
+    else
+        for _, esp in pairs(ESPObjects) do
+            esp.Box.Visible = false; esp.Name.Visible = false; esp.BarBG.Visible = false; esp.BarFG.Visible = false; esp.Highlight.Enabled = false
+        end
+    end
+end)
 
-        setreadonly(v257, false)
 
-        v257.__namecall = newcclosure(function(...)
-            local v259 = getnamecallmethod()
-            local v260 = {...}
-
-            if tostring(v259) ~= 'FireServer' or (tostring(v260[1]) ~= 'RemoteEvent' or (tostring(v260[2]) == 'true' or (tostring(v260[2]) == 'false' or Playersaimbot == nil))) then
-                return ___namecall(...)
-            end
-            if type(v260[2]) ~= 'vector' then
-                v260[2] = CFrame.new(PlayersPosition)
-            else
-                v260[2] = PlayersPosition
-            end
-
-            return ___namecall(unpack(v260))
-        end)
-    end)
-    loadstring(game:HttpGet('https://raw.githubusercontent.com/ThundarZ/Welcome/main/Main/Function/Mabar.lua'))()
-    u75.Button1Down:Connect(function()
-        pcall(function()
-            if Playersaimbot ~= nil then
-                local v261 = {
-                    PlayersPosition,
-                    game:GetService('Players'):FindFirstChild(Playersaimbot).Character.HumanoidRootPart,
-                }
-
-                game:GetService('Players').LocalPlayer.Character[game.Players.LocalPlayer.Character:FindFirstChildOfClass('Tool').Name].RemoteFunctionShoot:InvokeServer(unpack(v261))
-            end
+-- ============================================================
+--  CUSTOM NOTIFICATION (WITH LOGO & SLIDING FROM RIGHT)
+-- ============================================================
+local function BunnyGlowNotification()
+    pcall(function()
+        local sg = Instance.new("ScreenGui")
+        sg.Name = "BunnyNotify"
+        sg.ResetOnSpawn = false
+        local parentToUse = CoreGui
+        if not pcall(function() sg.Parent = CoreGui end) then
+            parentToUse = LocalPlayer:WaitForChild("PlayerGui")
+            sg.Parent = parentToUse
+        end
+        
+        local frame = Instance.new("Frame", sg)
+        frame.Size = UDim2.new(0, 270, 0, 50)
+        -- Starts off-screen to the right
+        frame.Position = UDim2.new(1, 300, 1, -80) 
+        frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+        frame.BackgroundTransparency = 0.4
+        frame.BorderSizePixel = 0
+        
+        local corner = Instance.new("UICorner", frame)
+        corner.CornerRadius = UDim.new(0, 8)
+        
+        local stroke = Instance.new("UIStroke", frame)
+        stroke.Color = Color3.fromRGB(0, 170, 255)
+        stroke.Thickness = 1.2 -- Thinner Blue Light
+        stroke.Transparency = 0.1
+        
+        -- Custom Image Logo
+        local logo = Instance.new("ImageLabel", frame)
+        logo.Size = UDim2.new(0, 30, 0, 30)
+        logo.Position = UDim2.new(0, 12, 0.5, -15)
+        logo.BackgroundTransparency = 1
+        logo.Image = "rbxassetid://93880685309116" -- Your New Updated Logo
+        
+        local textLabel = Instance.new("TextLabel", frame)
+        textLabel.Size = UDim2.new(1, -55, 1, 0)
+        textLabel.Position = UDim2.new(0, 52, 0, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = "Bunny Hub has fully loaded."
+        textLabel.TextColor3 = Color3.fromRGB(240, 255, 255)
+        textLabel.Font = Enum.Font.GothamBold
+        textLabel.TextSize = 13
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        -- Animate In (Slide from right edge to 20px off the right edge)
+        local ts = game:GetService("TweenService")
+        local tIn = ts:Create(frame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(1, -290, 1, -80)})
+        tIn:Play()
+        
+        -- Wait 4 seconds, then Animate Out and Destroy
+        task.delay(4, function()
+            local tOut = ts:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(1, 300, 1, -80)})
+            tOut:Play()
+            tOut.Completed:Wait()
+            sg:Destroy()
         end)
     end)
 end
 
--- RUNS SCRIPT INSTANTLY WITHOUT KEY
-LoadScript()
-
-pcall(function()
-    u3({
-        Title = 'Key Bypassed',
-        Content = 'Loaded ThunderZ Hub without a key!',
-        Delay = 3,
-    })
-end)
+BunnyGlowNotification()
