@@ -1,9 +1,7 @@
 -- ============================================================
---  BUNNY HUB | WindUI Mobile Edition
+--  BUNNY HUB | Custom UI Mobile Edition
 --  Advanced Aimlock, ESP, & Combat Features
 -- ============================================================
-
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
@@ -12,6 +10,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui          = game:GetService("CoreGui")
 local Lighting         = game:GetService("Lighting")
 local StarterGui       = game:GetService("StarterGui")
+local TweenService     = game:GetService("TweenService")
+local HttpService      = game:GetService("HttpService")
 local LocalPlayer      = Players.LocalPlayer
 local Camera           = workspace.CurrentCamera
 
@@ -49,7 +49,7 @@ local Settings = {
     },
     FOV = {
         Visible        = true,
-        FollowCursor   = true,
+        FollowCursor   = false, -- Changed to false for mobile stability
         Radius         = 150,
         Thickness      = 1.5,
         Color          = Color3RGB(255, 255, 255),
@@ -106,10 +106,8 @@ local Settings = {
         DisableDuration    = 0.2,
     },
     UI = {
-        ToggleKey = "K",
+        ToggleKey = Enum.KeyCode.K,
     },
-    
-    -- [ BUNNY HUB SPECIFIC SETTINGS ] --
     Bunny = {
         TargetMode    = "Players",
         TargetPlayer  = "Nearest",
@@ -158,13 +156,11 @@ local function GetNearestBunnyPlayer()
     if InSafeZone() then return nil end
     local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return nil end
-
     if Settings.Bunny.TargetPlayer == "Specific" and Settings.Bunny.SpecificPlayer then
         local p = Players:FindFirstChild(Settings.Bunny.SpecificPlayer)
         if p and IsValidBunnyPlayer(p) then return p.Character:FindFirstChild("HumanoidRootPart") end
         return nil
     end
-
     local bestDist, bestHRP = math.huge, nil
     for _, v in ipairs(Players:GetPlayers()) do
         if v ~= LocalPlayer and IsValidBunnyPlayer(v) then
@@ -208,188 +204,508 @@ local function GetBunnyTarget()
 end
 
 -- ============================================================
---  WINDOW SETUP
+--  CUSTOM UI BUILDER
 -- ============================================================
-local Window = WindUI:CreateWindow({
-    Title       = "Bunny Hub",
-    Author      = "by rhoscript",
-    Folder      = "BunnyHub",
-    Size        = UDim2.fromOffset(680, 620), 
-    Theme       = "Dark",
-    Resizable   = true,
-    Transparent = true, 
-})
+local BunnyUI = Instance.new("ScreenGui")
+BunnyUI.Name = "BunnyHubUI"
+BunnyUI.ResetOnSpawn = false
+BunnyUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() BunnyUI.Parent = CoreGui end)
+if not BunnyUI.Parent then BunnyUI.Parent = LocalPlayer.PlayerGui end
 
-Window:SetToggleKey(Enum.KeyCode.K)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 500, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -175)
+MainFrame.BackgroundColor3 = Color3RGB(18, 18, 22)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = BunnyUI
 
--- ============================================================
---  TABS
--- ============================================================
-local HomeTab     = Window:Tab({ Title = "Home",     Icon = "home"      })
-local BunnyTab    = Window:Tab({ Title = "Combat",   Icon = "swords"    }) 
-local AimlockTab  = Window:Tab({ Title = "Aimlock",  Icon = "crosshair" })
-local ESPTab      = Window:Tab({ Title = "ESP",      Icon = "eye"       })
-local PlayerTab   = Window:Tab({ Title = "Player",   Icon = "user"      })
-local VisualsTab  = Window:Tab({ Title = "Visuals",  Icon = "palette"   })
-local SettingsTab = Window:Tab({ Title = "Settings", Icon = "settings"  })
+local MainCorner = Instance.new("UICorner", MainFrame)
+MainCorner.CornerRadius = UDim.new(0, 8)
 
--- ============================================================
---  HOME TAB
--- ============================================================
-local HomeWelcome = HomeTab:Section({ Title = "Welcome", Opened = true })
-HomeWelcome:Paragraph({
-    Title = "Bunny Hub Mobile Edition",
-    Desc  = "Welcome to Bunny Hub. This menu features a fully transparent dark-mode UI, mobile optimizations, and powerful combat systems including Silent Aim, Smart Aimlock, and Fast Attack.",
-    Color = "Blue",
-})
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Color3RGB(0, 170, 255)
+MainStroke.Thickness = 1.2
+MainStroke.Transparency = 0.2
 
--- ============================================================
---  BUNNY TAB (Custom Combat Features)
--- ============================================================
-local BunTarget = BunnyTab:Section({ Title = "Targeting (For Silent/Fast Aim)", Opened = true })
-BunTarget:Dropdown({
-    Title = "Target Mode",
-    Values = {"Players", "NPC"},
-    Value = "Players",
-    Callback = function(v) Settings.Bunny.TargetMode = v end
-})
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 35)
+TopBar.BackgroundColor3 = Color3RGB(12, 12, 16)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
 
-local BunCombat = BunnyTab:Section({ Title = "Combat Hacks", Opened = true })
-BunCombat:Toggle({
-    Title = "Silent Aim (Magic Bullets)",
-    Desc  = "Projectiles automatically hit the target without snapping your camera.",
-    Value = false,
-    Callback = function(v) Settings.Bunny.SilentAim = v end
-})
-BunCombat:Toggle({
-    Title = "Aimbot Gun",
-    Desc  = "Auto fires guns at the nearest target.",
-    Value = false,
-    Callback = function(v) Settings.Bunny.AimbotGun = v end
-})
-BunCombat:Toggle({
-    Title = "Aimbot Skill",
-    Desc  = "Auto fires skills at the nearest target.",
-    Value = false,
-    Callback = function(v) Settings.Bunny.AimbotSkill = v end
-})
-BunCombat:Toggle({
-    Title = "Fast Attack (M1)",
-    Desc  = "Spams click attacks automatically.",
-    Value = false,
-    Callback = function(v) Settings.Bunny.FastAttack = v end
-})
-BunCombat:Slider({
-    Title = "Fast Attack Delay",
-    Step  = 0.05,
-    Value = { Min = 0, Max = 1, Default = 0 },
-    Callback = function(v) Settings.Bunny.FastAtkDelay = v end
-})
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -40, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Bunny Hub | rhoscript"
+TitleLabel.TextColor3 = Color3RGB(240, 255, 255)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 14
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TopBar
 
-local BunAuto = BunnyTab:Section({ Title = "Auto Features", Opened = true })
-BunAuto:Toggle({ Title = "Auto Haki (Buso)", Value = false, Callback = function(v) Settings.Bunny.AutoHaki = v end })
-BunAuto:Toggle({ Title = "Auto V3", Value = false, Callback = function(v) Settings.Bunny.AutoV3 = v end })
-BunAuto:Toggle({ Title = "Auto V4", Value = false, Callback = function(v) Settings.Bunny.AutoV4 = v end })
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 35, 0, 35)
+CloseBtn.Position = UDim2.new(1, -35, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3RGB(200, 200, 200)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+CloseBtn.Parent = TopBar
 
-local BunWorld = BunnyTab:Section({ Title = "World & Player", Opened = true })
-BunWorld:Toggle({ Title = "Walk on Water", Value = false, Callback = function(v) Settings.Bunny.WalkWater = v end })
-BunWorld:Toggle({ Title = "Safe Mode", Desc = "Teleports you to the sky when HP is low.", Value = false, Callback = function(v) Settings.Bunny.SafeMode = v end })
-BunWorld:Slider({ Title = "Safe HP Threshold %", Step = 1, Value = {Min = 5, Max = 80, Default = 30}, Callback = function(v) Settings.Bunny.SafeHPThresh = v end })
-
-BunWorld:Button({
-    Title = "Get Click-TP Tool",
-    Callback = function()
-        local tool = Instance.new("Tool", LocalPlayer.Backpack)
-        tool.Name = "Bunni TP"; tool.RequiresHandle = false
-        tool.Activated:Connect(function()
-            local m = LocalPlayer:GetMouse()
-            if m.Hit and LocalPlayer.Character then
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameNew(m.Hit.Position + Vector3New(0, 5, 0))
-            end
-        end)
-        Notify("Tool Added", "Click TP in backpack!", 2)
+-- Draggable Logic
+local dragging, dragInput, dragStart, startPos
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = MainFrame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
     end
-})
-BunWorld:Button({
-    Title = "Apply High Performance (FPS Boost)",
-    Callback = function()
-        settings().Rendering.QualityLevel = "Level01"
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        for _, e in ipairs(Lighting:GetChildren()) do if e:IsA("PostEffect") then e:Destroy() end end
-        for _, v in ipairs(game:GetDescendants()) do
-            pcall(function()
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
-                    v.Enabled = false
-                elseif v:IsA("Decal") or v:IsA("Texture") then
-                    v.Transparency = 1
-                elseif v:IsA("BasePart") then
-                    v.Material = Enum.Material.SmoothPlastic
-                    v.Reflectance = 0
-                    v.CastShadow = false
-                end
-            end)
+end)
+TopBar.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Animation Toggle
+local isUIOpen = false
+local function ToggleUI()
+    isUIOpen = not isUIOpen
+    if isUIOpen then
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, 500, 0, 0)
+        TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 500, 0, 350)}):Play()
+    else
+        local tween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 500, 0, 0)})
+        tween:Play()
+        tween.Completed:Connect(function() MainFrame.Visible = false end)
+    end
+end
+
+CloseBtn.MouseButton1Click:Connect(ToggleUI)
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Settings.UI.ToggleKey then ToggleUI() end
+end)
+
+-- Tab System
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, 0, 0, 30)
+TabBar.Position = UDim2.new(0, 0, 0, 35)
+TabBar.BackgroundColor3 = Color3RGB(15, 15, 20)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = MainFrame
+
+local TabList = Instance.new("UIListLayout", TabBar)
+TabList.FillDirection = Enum.FillDirection.Horizontal
+TabList.SortOrder = Enum.SortOrder.LayoutOrder
+
+local TabIndicator = Instance.new("Frame")
+TabIndicator.Size = UDim2.new(0, 62, 0, 2)
+TabIndicator.Position = UDim2.new(0, 0, 1, -2)
+TabIndicator.BackgroundColor3 = Color3RGB(0, 170, 255)
+TabIndicator.BorderSizePixel = 0
+TabIndicator.Parent = TabBar
+
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, 0, 1, -65)
+ContentFrame.Position = UDim2.new(0, 0, 0, 65)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+local Tabs = {}
+local function CreateTab(name)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 62, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = name
+    btn.TextColor3 = Color3RGB(180, 180, 180)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Parent = TabBar
+    
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.Visible = false
+    page.ScrollBarThickness = 4
+    page.ScrollBarImageColor3 = Color3RGB(0, 170, 255)
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Parent = ContentFrame
+    
+    local layout = Instance.new("UIListLayout", page)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 5)
+    
+    local padding = Instance.new("UIPadding", page)
+    padding.PaddingTop = UDim.new(0, 5)
+    padding.PaddingBottom = UDim.new(0, 5)
+    padding.PaddingLeft = UDim.new(0, 5)
+    padding.PaddingRight = UDim.new(0, 5)
+    
+    table.insert(Tabs, {Btn = btn, Page = page})
+    
+    btn.MouseButton1Click:Connect(function()
+        for _, t in ipairs(Tabs) do t.Page.Visible = false; t.Btn.TextColor3 = Color3RGB(180, 180, 180) end
+        page.Visible = true; btn.TextColor3 = Color3RGB(255, 255, 255)
+        TweenService:Create(TabIndicator, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {Position = UDim2.new(0, btn.AbsolutePosition.X - TabBar.AbsolutePosition.X, 1, -2)}):Play()
+    end)
+    
+    return page
+end
+
+-- UI Element Factories
+local function CreateSection(parent, title)
+    local sec = Instance.new("Frame")
+    sec.Size = UDim2.new(1, 0, 0, 25)
+    sec.BackgroundColor3 = Color3RGB(25, 25, 32)
+    sec.BorderSizePixel = 0
+    sec.Parent = parent
+    
+    local corner = Instance.new("UICorner", sec)
+    corner.CornerRadius = UDim.new(0, 4)
+    
+    local lbl = Instance.new("TextLabel", sec)
+    lbl.Size = UDim2.new(1, -10, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = Color3RGB(0, 170, 255)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+end
+
+local function CreateToggle(parent, title, default, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.BackgroundColor3 = Color3RGB(22, 22, 28)
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.Parent = parent
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 4)
+    
+    local lbl = Instance.new("TextLabel", btn)
+    lbl.Size = UDim2.new(1, -50, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = Color3RGB(210, 210, 210)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local switch = Instance.new("Frame", btn)
+    switch.Size = UDim2.new(0, 30, 0, 14)
+    switch.Position = UDim2.new(1, -40, 0.5, -7)
+    switch.BackgroundColor3 = Color3RGB(40, 40, 50)
+    switch.BorderSizePixel = 0
+    
+    local switchCorner = Instance.new("UICorner", switch)
+    switchCorner.CornerRadius = UDim.new(1, 0)
+    
+    local circle = Instance.new("Frame", switch)
+    circle.Size = UDim2.new(0, 12, 0, 12)
+    circle.Position = UDim2.new(0, 1, 0.5, -6)
+    circle.BackgroundColor3 = Color3RGB(200, 200, 200)
+    circle.BorderSizePixel = 0
+    
+    local circleCorner = Instance.new("UICorner", circle)
+    circleCorner.CornerRadius = UDim.new(1, 0)
+    
+    local toggled = default or false
+    local function UpdateToggle(anim)
+        if toggled then
+            circle.BackgroundColor3 = Color3RGB(0, 170, 255)
+            if anim then TweenService:Create(circle, TweenInfo.new(0.2), {Position = UDim2.new(0, 17, 0.5, -6)}):Play()
+            else circle.Position = UDim2.new(0, 17, 0.5, -6) end
+        else
+            circle.BackgroundColor3 = Color3RGB(200, 200, 200)
+            if anim then TweenService:Create(circle, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6)}):Play()
+            else circle.Position = UDim2.new(0, 1, 0.5, -6) end
         end
-        Notify("High Performance", "FPS Boost Applied!", 2)
+        callback(toggled)
     end
-})
+    UpdateToggle(false)
+    
+    btn.MouseButton1Click:Connect(function() toggled = not toggled; UpdateToggle(true) end)
+end
 
--- ============================================================
---  AIMLOCK, ESP, PLAYER, VISUALS, SETTINGS
--- ============================================================
-local AimSection = AimlockTab:Section({ Title = "Aimlock Control", Opened = true })
-AimSection:Toggle({ Title = "Enable Aimlock", Flag = "AimlockEnabled", Value = false, Callback = function(v) Settings.Aimlock.Enabled = v end })
-AimSection:Keybind({ Title = "Aimlock Key", Flag = "AimlockKeybind", Value = "RightClick", Callback = function(v) Settings.Aimlock.Keybind = v end })
-AimSection:Toggle({ Title = "Wall Check", Flag = "AimlockWallCheck", Value = true, Callback = function(v) Settings.Aimlock.WallCheck = v end })
-AimSection:Toggle({ Title = "Team Check", Flag = "AimlockTeamCheck", Value = true, Callback = function(v) Settings.Aimlock.TeamCheck = v end })
+local function CreateSlider(parent, title, min, max, default, step, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundColor3 = Color3RGB(22, 22, 28)
+    frame.BorderSizePixel = 0
+    frame.Parent = parent
+    
+    local corner = Instance.new("UICorner", frame)
+    corner.CornerRadius = UDim.new(0, 4)
+    
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size = UDim2.new(1, -10, 0, 20)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title .. ": " .. tostring(default)
+    lbl.TextColor3 = Color3RGB(210, 210, 210)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local barBG = Instance.new("Frame", frame)
+    barBG.Size = UDim2.new(1, -20, 0, 6)
+    barBG.Position = UDim2.new(0, 10, 1, -13)
+    barBG.BackgroundColor3 = Color3RGB(35, 35, 45)
+    barBG.BorderSizePixel = 0
+    
+    local barCorner = Instance.new("UICorner", barBG)
+    barCorner.CornerRadius = UDim.new(1, 0)
+    
+    local barFill = Instance.new("Frame", barBG)
+    barFill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
+    barFill.BackgroundColor3 = Color3RGB(0, 170, 255)
+    barFill.BorderSizePixel = 0
+    
+    local fillCorner = Instance.new("UICorner", barFill)
+    fillCorner.CornerRadius = UDim.new(1, 0)
+    
+    local sliding = false
+    local function UpdateSlider(inp)
+        local pos = mathClamp((inp.Position.X - barBG.AbsolutePosition.X) / barBG.AbsoluteSize.X, 0, 1)
+        local val = min + (max - min) * pos
+        val = mathFloor(val / step) * step
+        val = mathClamp(val, min, max)
+        barFill.Size = UDim2.new(pos, 0, 1, 0)
+        lbl.Text = title .. ": " .. string.format("%.2f", val)
+        callback(val)
+    end
+    
+    barBG.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then sliding = true; UpdateSlider(input) end end)
+    barBG.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then sliding = false end end)
+    UserInputService.InputChanged:Connect(function(input) if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then UpdateSlider(input) end end)
+end
 
-local AimTuning = AimlockTab:Section({ Title = "Aim Tuning", Opened = true })
-AimTuning:Dropdown({ Title = "Aim Mode", Flag = "AimlockAimMode", Values = { "Smart", "Chaos", "Head", "Torso", "Limbs", "HRP" }, Value = "Smart", Callback = function(v) Settings.Aimlock.AimMode = v end })
-AimTuning:Toggle({ Title = "Enable Prediction", Flag = "AimlockPredictionEnabled", Value = true, Callback = function(v) Settings.Aimlock.PredictionEnabled = v end })
-AimTuning:Slider({ Title = "Prediction Strength", Flag = "AimlockPrediction", Step = 0.005, Value = { Min = 0, Max = 0.3, Default = 0.135 }, Callback = function(v) Settings.Aimlock.Prediction = v end })
+local function CreateButton(parent, title, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.BackgroundColor3 = Color3RGB(25, 25, 32)
+    btn.BorderSizePixel = 0
+    btn.Text = title
+    btn.TextColor3 = Color3RGB(210, 210, 210)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Parent = parent
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 4)
+    
+    btn.MouseButton1Click:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3RGB(0, 170, 255), TextColor3 = Color3RGB(255,255,255)}):Play()
+        task.delay(0.2, function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3RGB(25, 25, 32), TextColor3 = Color3RGB(210, 210, 210)}):Play() end)
+        callback()
+    end)
+end
 
-local ESPCore = ESPTab:Section({ Title = "ESP Core", Opened = true })
-ESPCore:Toggle({ Title = "Enable ESP", Flag = "ESPEnabled", Value = false, Callback = function(v) Settings.Visuals.ESPEnabled = v end })
-ESPCore:Toggle({ Title = "Team Check", Flag = "ESPTeamCheck", Value = true, Callback = function(v) Settings.Visuals.TeamCheck = v end })
-ESPCore:Toggle({ Title = "ESP Boxes", Value = true, Callback = function(v) Settings.Visuals.ESPBoxes = v end })
-ESPCore:Toggle({ Title = "Show Names", Value = true, Callback = function(v) Settings.Visuals.ESPNames = v end })
-ESPCore:Toggle({ Title = "Health Bar", Value = true, Callback = function(v) Settings.Visuals.HealthBar = v end })
-ESPCore:Toggle({ Title = "Enable Chams", Value = false, Callback = function(v) Settings.Visuals.ChamsEnabled = v end })
-
-local SpeedSection = PlayerTab:Section({ Title = "Walk Speed & Jump Power", Opened = true })
-SpeedSection:Toggle({ Title = "Enable Walk Speed", Value = false, Callback = function(v) Settings.Player.WalkSpeedEnabled = v end })
-SpeedSection:Slider({ Title = "Walk Speed", Step = 1, Value = { Min = 16, Max = 250, Default = 16 }, Callback = function(v) Settings.Player.WalkSpeed = v end })
-SpeedSection:Toggle({ Title = "Enable Jump Power", Value = false, Callback = function(v) Settings.Player.JumpPowerEnabled = v end })
-SpeedSection:Slider({ Title = "Jump Power", Step = 5, Value = { Min = 50, Max = 300, Default = 50 }, Callback = function(v) Settings.Player.JumpPower = v end })
-
-local FOVSection = VisualsTab:Section({ Title = "FOV Circle", Opened = true })
-FOVSection:Toggle({ Title = "Show FOV Circle", Value = true, Callback = function(v) Settings.FOV.Visible = v end })
-FOVSection:Slider({ Title = "FOV Radius", Step = 5, Value = { Min = 30, Max = 600, Default = 150 }, Callback = function(v) Settings.FOV.Radius = v end })
-
-local ConfigSection = SettingsTab:Section({ Title = "Config System", Opened = true })
-local BunnyConfig = Window.ConfigManager:CreateConfig("bunnyhub_config")
-BunnyConfig:Register(Window)
-
-ConfigSection:Button({ 
-    Title = "Save Config", 
-    Callback = function() BunnyConfig:Save(); Notify("Config", "Saved!") end 
-})
-ConfigSection:Button({ 
-    Title = "Load Config", 
-    Callback = function() BunnyConfig:Load(); Notify("Config", "Loaded!") end 
-})
-ConfigSection:Button({ 
-    Title = "Reset Config", 
-    Callback = function() 
-        pcall(function()
-            if delfile then
-                delfile("BunnyHub/bunnyhub_config.txt")
-                delfile("BunnyHub/bunnyhub_config.json")
-            end
+local function CreateDropdown(parent, title, options, default, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 30)
+    frame.BackgroundColor3 = Color3RGB(22, 22, 28)
+    frame.BorderSizePixel = 0
+    frame.ClipsDescendants = true
+    frame.Parent = parent
+    
+    local corner = Instance.new("UICorner", frame)
+    corner.CornerRadius = UDim.new(0, 4)
+    
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size = UDim2.new(1, -30, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title .. ": " .. default
+    lbl.TextColor3 = Color3RGB(210, 210, 210)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local arrow = Instance.new("TextLabel", frame)
+    arrow.Size = UDim2.new(0, 20, 1, 0)
+    arrow.Position = UDim2.new(1, -20, 0, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "▼"
+    arrow.TextColor3 = Color3RGB(150,150,150)
+    arrow.Font = Enum.Font.Gotham
+    arrow.TextSize = 10
+    
+    local listFrame = Instance.new("Frame", frame)
+    listFrame.Size = UDim2.new(1, 0, 0, #options * 25)
+    listFrame.Position = UDim2.new(0, 0, 1, 0)
+    listFrame.BackgroundColor3 = Color3RGB(28, 28, 35)
+    listFrame.BorderSizePixel = 0
+    
+    local listCorner = Instance.new("UICorner", listFrame)
+    listCorner.CornerRadius = UDim.new(0, 4)
+    
+    local listLayout = Instance.new("UIListLayout", listFrame)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local isOpen = false
+    for i, opt in ipairs(options) do
+        local optBtn = Instance.new("TextButton", listFrame)
+        optBtn.Size = UDim2.new(1, 0, 0, 25)
+        optBtn.BackgroundTransparency = 1
+        optBtn.Text = opt
+        optBtn.TextColor3 = Color3RGB(200, 200, 200)
+        optBtn.Font = Enum.Font.Gotham
+        optBtn.TextSize = 11
+        optBtn.MouseButton1Click:Connect(function()
+            lbl.Text = title .. ": " .. opt
+            callback(opt)
+            isOpen = false
+            TweenService:Create(frame, TweenInfo.new(0.2), {Size = UDim2.new(1, 0, 0, 30)}):Play()
         end)
-        Notify("Config", "Config reset! Re-execute script to apply defaults.") 
-    end 
-})
+    end
+    
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isOpen = not isOpen
+            if isOpen then TweenService:Create(frame, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {Size = UDim2.new(1, 0, 0, 30 + (#options * 25))}):Play()
+            else TweenService:Create(frame, TweenInfo.new(0.2), {Size = UDim2.new(1, 0, 0, 30)}):Play() end
+        end
+    end)
+end
+
+-- ============================================================
+--  BUILDING THE TABS 
+-- ============================================================
+local HomePg = CreateTab("Home")
+local CombatPg = CreateTab("Combat")
+local AimPg = CreateTab("Aimlock")
+local ESPPg = CreateTab("ESP")
+local PlayerPg = CreateTab("Player")
+local VisPg = CreateTab("Visuals")
+local SetPg = CreateTab("Settings")
+
+-- HOME
+CreateSection(HomePg, "Welcome")
+local welc = Instance.new("TextLabel", HomePg)
+welc.Size = UDim2.new(1, 0, 0, 60)
+welc.BackgroundTransparency = 1
+welc.Text = "Welcome to Bunny Hub Mobile Edition. This custom menu features smooth animations, mobile optimizations, and powerful combat systems."
+welc.TextColor3 = Color3RGB(180, 180, 190)
+welc.Font = Enum.Font.Gotham
+welc.TextSize = 12
+welc.TextWrapped = true
+welc.TextXAlignment = Enum.TextXAlignment.Left
+
+-- COMBAT
+CreateSection(CombatPg, "Targeting")
+CreateDropdown(CombatPg, "Target Mode", {"Players", "NPC"}, "Players", function(v) Settings.Bunny.TargetMode = v end)
+
+CreateSection(CombatPg, "Combat Hacks")
+CreateToggle(CombatPg, "Silent Aim (Magic Bullets)", false, function(v) Settings.Bunny.SilentAim = v end)
+CreateToggle(CombatPg, "Aimbot Gun", false, function(v) Settings.Bunny.AimbotGun = v end)
+CreateToggle(CombatPg, "Aimbot Skill", false, function(v) Settings.Bunny.AimbotSkill = v end)
+CreateToggle(CombatPg, "Fast Attack (M1)", false, function(v) Settings.Bunny.FastAttack = v end)
+CreateSlider(CombatPg, "Fast Attack Delay", 0, 1, 0, 0.05, function(v) Settings.Bunny.FastAtkDelay = v end)
+
+CreateSection(CombatPg, "Auto Features")
+CreateToggle(CombatPg, "Auto Haki (Buso)", false, function(v) Settings.Bunny.AutoHaki = v end)
+CreateToggle(CombatPg, "Auto V3", false, function(v) Settings.Bunny.AutoV3 = v end)
+CreateToggle(CombatPg, "Auto V4", false, function(v) Settings.Bunny.AutoV4 = v end)
+
+CreateSection(CombatPg, "World & Player")
+CreateToggle(CombatPg, "Walk on Water", false, function(v) Settings.Bunny.WalkWater = v end)
+CreateToggle(CombatPg, "Safe Mode", false, function(v) Settings.Bunny.SafeMode = v end)
+CreateSlider(CombatPg, "Safe HP Threshold", 5, 80, 30, 1, function(v) Settings.Bunny.SafeHPThresh = v end)
+CreateButton(CombatPg, "Get Click-TP Tool", function()
+    local tool = Instance.new("Tool", LocalPlayer.Backpack)
+    tool.Name = "Bunni TP"; tool.RequiresHandle = false
+    tool.Activated:Connect(function()
+        local m = LocalPlayer:GetMouse()
+        if m.Hit and LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameNew(m.Hit.Position + Vector3New(0, 5, 0)) end
+    end)
+    Notify("Tool Added", "Click TP in backpack!", 2)
+end)
+CreateButton(CombatPg, "Apply FPS Boost", function()
+    settings().Rendering.QualityLevel = "Level01"; Lighting.GlobalShadows = false; Lighting.FogEnd = 9e9
+    for _, e in ipairs(Lighting:GetChildren()) do if e:IsA("PostEffect") then e:Destroy() end end
+    for _, v in ipairs(game:GetDescendants()) do pcall(function()
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then v.Enabled = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1
+        elseif v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic; v.Reflectance = 0; v.CastShadow = false end
+    end) end
+    Notify("High Performance", "FPS Boost Applied!", 2)
+end)
+
+-- AIMLOCK
+CreateSection(AimPg, "Aimlock Control")
+CreateToggle(AimPg, "Enable Aimlock", false, function(v) Settings.Aimlock.Enabled = v end)
+CreateToggle(AimPg, "Wall Check", true, function(v) Settings.Aimlock.WallCheck = v end)
+CreateToggle(AimPg, "Team Check", true, function(v) Settings.Aimlock.TeamCheck = v end)
+
+CreateSection(AimPg, "Aim Tuning")
+CreateDropdown(AimPg, "Aim Mode", {"Smart", "Chaos", "Head", "Torso", "Limbs", "HRP"}, "Smart", function(v) Settings.Aimlock.AimMode = v end)
+CreateToggle(AimPg, "Enable Prediction", true, function(v) Settings.Aimlock.PredictionEnabled = v end)
+CreateSlider(AimPg, "Prediction Strength", 0, 0.3, 0.135, 0.005, function(v) Settings.Aimlock.Prediction = v end)
+
+-- ESP
+CreateSection(ESPPg, "ESP Core")
+CreateToggle(ESPPg, "Enable ESP", false, function(v) Settings.Visuals.ESPEnabled = v end)
+CreateToggle(ESPPg, "Team Check", true, function(v) Settings.Visuals.TeamCheck = v end)
+CreateToggle(ESPPg, "ESP Boxes", true, function(v) Settings.Visuals.ESPBoxes = v end)
+CreateToggle(ESPPg, "Show Names", true, function(v) Settings.Visuals.ESPNames = v end)
+CreateToggle(ESPPg, "Health Bar", true, function(v) Settings.Visuals.HealthBar = v end)
+CreateToggle(ESPPg, "Enable Chams", false, function(v) Settings.Visuals.ChamsEnabled = v end)
+
+-- PLAYER
+CreateSection(PlayerPg, "Walk Speed & Jump Power")
+CreateToggle(PlayerPg, "Enable Walk Speed", false, function(v) Settings.Player.WalkSpeedEnabled = v end)
+CreateSlider(PlayerPg, "Walk Speed", 16, 250, 16, 1, function(v) Settings.Player.WalkSpeed = v end)
+CreateToggle(PlayerPg, "Enable Jump Power", false, function(v) Settings.Player.JumpPowerEnabled = v end)
+CreateSlider(PlayerPg, "Jump Power", 50, 300, 50, 5, function(v) Settings.Player.JumpPower = v end)
+
+-- VISUALS
+CreateSection(VisPg, "FOV Circle")
+CreateToggle(VisPg, "Show FOV Circle", true, function(v) Settings.FOV.Visible = v end)
+CreateSlider(VisPg, "FOV Radius", 30, 600, 150, 5, function(v) Settings.FOV.Radius = v end)
+CreateToggle(VisPg, "FOV Follows Finger/Mouse", false, function(v) Settings.FOV.FollowCursor = v end) -- Default off for mobile!
+
+-- SETTINGS
+CreateSection(SetPg, "Config System (Requires Executor Support)")
+CreateButton(SetPg, "Save Config", function()
+    pcall(function()
+        if writefile then
+            writefile("BunnyHub/Config.json", HttpService:JSONEncode(Settings))
+            Notify("Config", "Saved Successfully!", 2)
+        else Notify("Error", "Executor does not support writefile.", 3) end
+    end)
+end)
+CreateButton(SetPg, "Load Config", function()
+    pcall(function()
+        if readfile then
+            local data = HttpService:JSONDecode(readfile("BunnyHub/Config.json"))
+            for k, v in pairs(data) do Settings[k] = v end
+            Notify("Config", "Loaded Successfully! (Restart script to fully apply)", 3)
+        else Notify("Error", "Executor does not support readfile.", 3) end
+    end)
+end)
+CreateButton(SetPg, "Reset Config", function()
+    pcall(function()
+        if delfile then delfile("BunnyHub/Config.json") end
+        Notify("Config", "Config reset! Re-execute script to apply defaults.", 3)
+    end)
+end)
+
+-- Open First Tab automatically
+Tabs[1].Btn.MouseButton1Click:Fire()
 
 -- ============================================================
 --  DRAWING OBJECTS & ESP LOGIC
@@ -403,7 +719,6 @@ local ChamsFolder = Instance.new("Folder")
 ChamsFolder.Name = "BunnyChams"
 ChamsFolder.Parent = CoreGui
 local ESPObjects = {}
-local ActivePlayers = {}
 
 local function CreateESP(player)
     pcall(function()
@@ -413,7 +728,6 @@ local function CreateESP(player)
             BarBG = Drawing.new("Square"),
             BarFG = Drawing.new("Square"),
             Highlight = Instance.new("Highlight", ChamsFolder),
-            _isVisible = false,
         }
         esp.Box.Thickness = 1.5; esp.Box.Filled = false
         esp.Name.Size = 14; esp.Name.Center = true; esp.Name.Outline = true; esp.Name.Color = Color3RGB(255,255,255)
@@ -436,57 +750,38 @@ end)
 --  BUNNY HUB BACKGROUND LOOPS & HOOKS
 -- ============================================================
 
--- Gun Tracker
 spawn(function()
     while wait(0.5) do pcall(function()
-        local function scan(c)
-            for _, v in pairs(c:GetChildren()) do
-                if v:IsA("Tool") and v:FindFirstChild("RemoteFunctionShoot") then
-                    SelectWeaponGun = v.Name
-                end
-            end
-        end
-        scan(LocalPlayer.Backpack)
-        if LocalPlayer.Character then scan(LocalPlayer.Character) end
+        local function scan(c) for _, v in pairs(c:GetChildren()) do if v:IsA("Tool") and v:FindFirstChild("RemoteFunctionShoot") then SelectWeaponGun = v.Name end end end
+        scan(LocalPlayer.Backpack); if LocalPlayer.Character then scan(LocalPlayer.Character) end
     end) end
 end)
 
--- Auto Haki
 spawn(function()
     while task.wait(0.5) do pcall(function()
         if not Settings.Bunny.AutoHaki then return end
         local char = LocalPlayer.Character
-        if char and not char:FindFirstChild("HasBuso") then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
-        end
+        if char and not char:FindFirstChild("HasBuso") then ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso") end
     end) end
 end)
 
--- Auto V3 / V4 (Mobile Fixed)
 spawn(function()
-    while task.wait(0.5) do 
-        pcall(function()
-            if Settings.Bunny.AutoV3 then ReplicatedStorage.Remotes.CommE:FireServer("ActivateAbility") end
-            if Settings.Bunny.AutoV4 then ReplicatedStorage.Remotes.CommE:FireServer("Awakening") end
-        end) 
-    end
+    while task.wait(0.5) do pcall(function()
+        if Settings.Bunny.AutoV3 then ReplicatedStorage.Remotes.CommE:FireServer("ActivateAbility") end
+        if Settings.Bunny.AutoV4 then ReplicatedStorage.Remotes.CommE:FireServer("Awakening") end
+    end) end
 end)
 
--- Walk On Water
 spawn(function()
     while wait(0.5) do pcall(function()
         local plane = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("WaterBase-Plane")
         if plane then
-            if Settings.Bunny.WalkWater then
-                plane.Size = Vector3New(plane.Size.X, 112, plane.Size.Z)
-            else
-                plane.Size = Vector3New(plane.Size.X, 80, plane.Size.Z)
-            end
+            if Settings.Bunny.WalkWater then plane.Size = Vector3New(plane.Size.X, 112, plane.Size.Z)
+            else plane.Size = Vector3New(plane.Size.X, 80, plane.Size.Z) end
         end
     end) end
 end)
 
--- Safe Mode
 spawn(function()
     while task.wait(0.2) do pcall(function()
         if not Settings.Bunny.SafeMode then return end
@@ -494,14 +789,11 @@ spawn(function()
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hum and hrp then
             local thresh = (Settings.Bunny.SafeHPThresh / 100) * hum.MaxHealth
-            if hum.Health <= thresh then
-                hrp.CFrame = hrp.CFrame + Vector3New(0, 200, 0)
-            end
+            if hum.Health <= thresh then hrp.CFrame = hrp.CFrame + Vector3New(0, 200, 0) end
         end
     end) end
 end)
 
--- Fast Attack
 spawn(function()
     local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
     local RegAtk = Net:WaitForChild("RE/RegisterAttack")
@@ -512,9 +804,7 @@ spawn(function()
         for _, e in ipairs(folder:GetChildren()) do
             local head = e:FindFirstChild("Head")
             if head and e:FindFirstChild("Humanoid") and e.Humanoid.Health > 0 and e ~= LocalPlayer.Character then
-                if LocalPlayer:DistanceFromCharacter(head.Position) < 100 then
-                    table.insert(list, {e, head}); base = head
-                end
+                if LocalPlayer:DistanceFromCharacter(head.Position) < 100 then table.insert(list, {e, head}); base = head end
             end
         end
         return list, base
@@ -528,19 +818,14 @@ spawn(function()
         for _, d in ipairs(cList) do table.insert(eList, d) end
         local tool = char:FindFirstChildOfClass("Tool")
         if tool and tool:FindFirstChild("LeftClickRemote") then
-            for _, d in ipairs(eList) do
-                local dir = (d[1].HumanoidRootPart.Position - char:GetPivot().Position).Unit
-                pcall(function() tool.LeftClickRemote:FireServer(dir, 1) end)
-            end
+            for _, d in ipairs(eList) do local dir = (d[1].HumanoidRootPart.Position - char:GetPivot().Position).Unit; pcall(function() tool.LeftClickRemote:FireServer(dir, 1) end) end
         elseif #eList > 0 then
-            pcall(function() RegAtk:FireServer(0) end)
-            pcall(function() RegHit:FireServer(b1 or b2, eList) end)
+            pcall(function() RegAtk:FireServer(0) end); pcall(function() RegHit:FireServer(b1 or b2, eList) end)
         end
         task.wait(0)
     end
 end)
 
--- Silent Aim (Mobile & Damage Fixed)
 local Mouse = LocalPlayer:GetMouse()
 local _raw = getrawmetatable(game)
 local _origNC = _raw.__namecall
@@ -549,13 +834,8 @@ setreadonly(_raw, false)
 
 _raw.__index = newcclosure(function(t, k)
     if Settings.Bunny.SilentAim and not checkcaller() and t == Mouse then
-        if k == "Hit" then
-            local tHRP = GetBunnyTarget()
-            if tHRP then return CFrameNew(tHRP.Position) end
-        elseif k == "Target" then
-            local tHRP = GetBunnyTarget()
-            if tHRP then return tHRP end
-        end
+        if k == "Hit" then local tHRP = GetBunnyTarget(); if tHRP then return CFrameNew(tHRP.Position) end
+        elseif k == "Target" then local tHRP = GetBunnyTarget(); if tHRP then return tHRP end end
     end
     return _origIndex(t, k)
 end)
@@ -563,17 +843,13 @@ end)
 _raw.__namecall = newcclosure(function(self, ...)
     local args = {...}
     local method = getnamecallmethod()
-    
     if Settings.Bunny.SilentAim and not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
         if self.Name == "RemoteEvent" or self.Name == "RemoteFunctionShoot" or self.Name == "LeftClickRemote" then
             local tHRP = GetBunnyTarget()
             if tHRP then
                 for i, v in ipairs(args) do
-                    if typeof(v) == "Vector3" then 
-                        args[i] = tHRP.Position
-                    elseif typeof(v) == "CFrame" then 
-                        args[i] = CFrameNew(v.Position, tHRP.Position) 
-                    end
+                    if typeof(v) == "Vector3" then args[i] = tHRP.Position
+                    elseif typeof(v) == "CFrame" then args[i] = CFrameNew(v.Position, tHRP.Position) end
                 end
             end
         end
@@ -582,14 +858,11 @@ _raw.__namecall = newcclosure(function(self, ...)
 end)
 setreadonly(_raw, true)
 
--- Aimbot Gun / Skill
 RunService.Heartbeat:Connect(function()
     if Settings.Bunny.AimbotGun then
         local hrp = GetBunnyTarget(); if hrp and LocalPlayer.Character then
             local gun = LocalPlayer.Character:FindFirstChild(SelectWeaponGun)
-            if gun and gun:FindFirstChild("RemoteFunctionShoot") then
-                pcall(function() gun.RemoteFunctionShoot:InvokeServer(hrp.Position, hrp) end)
-            end
+            if gun and gun:FindFirstChild("RemoteFunctionShoot") then pcall(function() gun.RemoteFunctionShoot:InvokeServer(hrp.Position, hrp) end) end
         end
     end
 end)
@@ -600,9 +873,7 @@ RunService.RenderStepped:Connect(function()
             local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
             if tool and LocalPlayer.Character:FindFirstChild(tool.Name) then
                 local t = LocalPlayer.Character[tool.Name]
-                if t:FindFirstChild("MousePos") then
-                    pcall(function() t.RemoteEvent:FireServer(hrp.Position) end)
-                end
+                if t:FindFirstChild("MousePos") then pcall(function() t.RemoteEvent:FireServer(hrp.Position) end) end
             end
         end
     end
@@ -618,14 +889,9 @@ local function GetHealthColor(pct)
 end
 
 RunService.RenderStepped:Connect(function(dt)
-    -- FOV Ring
     local fovPos = Settings.FOV.FollowCursor and UserInputService:GetMouseLocation() or Vector2New(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
-    FOVRing.Position = fovPos
-    FOVRing.Radius = Settings.FOV.Radius
-    FOVRing.Visible = Settings.FOV.Visible
-    FOVRing.Color = Settings.FOV.Color
+    FOVRing.Position = fovPos; FOVRing.Radius = Settings.FOV.Radius; FOVRing.Visible = Settings.FOV.Visible; FOVRing.Color = Settings.FOV.Color
 
-    -- Player Mods
     local myChar = LocalPlayer.Character
     if myChar then
         local hum = myChar:FindFirstChildOfClass("Humanoid")
@@ -635,7 +901,6 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- ESP rendering
     if Settings.Visuals.ESPEnabled or Settings.Visuals.ChamsEnabled then
         for p, esp in pairs(ESPObjects) do
             local char = p.Character
@@ -643,42 +908,31 @@ RunService.RenderStepped:Connect(function(dt)
             local hum = char and char:FindFirstChild("Humanoid")
             if root and hum and hum.Health > 0 and (p.Team ~= LocalPlayer.Team or not Settings.Visuals.TeamCheck) then
                 local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                local dist = (Camera.CFrame.Position - root.Position).Magnitude
                 
-                if Settings.Visuals.ChamsEnabled then
-                    esp.Highlight.Adornee = char
-                    esp.Highlight.Enabled = true
-                    esp.Highlight.FillColor = Settings.Visuals.ChamsFillColor
-                    esp.Highlight.OutlineColor = Settings.Visuals.ChamsOutlineColor
-                else
-                    esp.Highlight.Enabled = false
-                end
+                if Settings.Visuals.ChamsEnabled then esp.Highlight.Adornee = char; esp.Highlight.Enabled = true; esp.Highlight.FillColor = Settings.Visuals.ChamsFillColor; esp.Highlight.OutlineColor = Settings.Visuals.ChamsOutlineColor
+                else esp.Highlight.Enabled = false end
 
-                if Settings.Visuals.ESPEnabled and onScreen and pos.Z < Settings.Visuals.MaxESPDistance then
-                    local head = char:FindFirstChild("Head")
-                    if head then
-                        local headPos = Camera:WorldToViewportPoint(head.Position + Vector3New(0,0.5,0))
-                        local boxH = mathAbs(headPos.Y - (pos.Y + (headPos.Y - pos.Y)*3))
-                        local boxW = boxH * 0.55
-                        
-                        esp.Box.Visible = Settings.Visuals.ESPBoxes
-                        esp.Box.Size = Vector2New(boxW, boxH)
-                        esp.Box.Position = Vector2New(pos.X - boxW/2, headPos.Y)
-                        esp.Box.Color = Settings.Visuals.VisColor
+                if Settings.Visuals.ESPEnabled and onScreen and dist <= Settings.Visuals.MaxESPDistance then
+                    local topPos = Camera:WorldToViewportPoint(root.Position + Vector3New(0, 3, 0))
+                    local bottomPos = Camera:WorldToViewportPoint(root.Position - Vector3New(0, 2.5, 0))
+                    local boxH = mathMax(2, mathAbs(topPos.Y - bottomPos.Y)); local boxW = boxH * 0.55
 
-                        esp.Name.Visible = Settings.Visuals.ESPNames
-                        esp.Name.Text = p.DisplayName
-                        esp.Name.Position = Vector2New(pos.X, headPos.Y - 16)
-
-                        local hpPct = hum.Health / (hum.MaxHealth > 0 and hum.MaxHealth or 100)
-                        esp.BarBG.Visible = Settings.Visuals.HealthBar
-                        esp.BarBG.Size = Vector2New(3, boxH)
-                        esp.BarBG.Position = Vector2New(pos.X - boxW/2 - 5, headPos.Y)
-                        
-                        esp.BarFG.Visible = Settings.Visuals.HealthBar
-                        esp.BarFG.Size = Vector2New(3, boxH * hpPct)
-                        esp.BarFG.Position = Vector2New(pos.X - boxW/2 - 5, headPos.Y + boxH - (boxH * hpPct))
-                        esp.BarFG.Color = GetHealthColor(hpPct)
+                    local isVisible = true
+                    if Settings.Visuals.UseVisColors then
+                        local rayParams = RaycastParams.new(); rayParams.FilterDescendantsInstances = {LocalPlayer.Character}; rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                        local rayResult = workspace:Raycast(Camera.CFrame.Position, (root.Position - Camera.CFrame.Position).Unit * dist, rayParams)
+                        if rayResult and rayResult.Instance and not rayResult.Instance:IsDescendantOf(char) then isVisible = false end
                     end
+
+                    local espColor = (Settings.Visuals.UseVisColors and not isVisible) and Settings.Visuals.HiddenColor or Settings.Visuals.VisColor
+
+                    esp.Box.Visible = Settings.Visuals.ESPBoxes; esp.Box.Size = Vector2New(boxW, boxH); esp.Box.Position = Vector2New(topPos.X - boxW/2, topPos.Y); esp.Box.Color = espColor
+                    esp.Name.Visible = Settings.Visuals.ESPNames; esp.Name.Text = Settings.Visuals.ESPNameStyle == "Display Name" and p.DisplayName or p.Name; esp.Name.Position = Vector2New(topPos.X, topPos.Y - 16); esp.Name.Color = Settings.Visuals.UseCustomNameColor and Settings.Visuals.ESPNameColor or espColor
+
+                    local hpPct = hum.Health / (hum.MaxHealth > 0 and hum.MaxHealth or 100)
+                    esp.BarBG.Visible = Settings.Visuals.HealthBar; esp.BarBG.Size = Vector2New(3, boxH); esp.BarBG.Position = Vector2New(topPos.X - boxW/2 - 5, topPos.Y)
+                    esp.BarFG.Visible = Settings.Visuals.HealthBar; esp.BarFG.Size = Vector2New(3, boxH * hpPct); esp.BarFG.Position = Vector2New(topPos.X - boxW/2 - 5, topPos.Y + boxH - (boxH * hpPct)); esp.BarFG.Color = GetHealthColor(hpPct)
                 else
                     esp.Box.Visible = false; esp.Name.Visible = false; esp.BarBG.Visible = false; esp.BarFG.Visible = false
                 end
@@ -687,73 +941,32 @@ RunService.RenderStepped:Connect(function(dt)
             end
         end
     else
-        for _, esp in pairs(ESPObjects) do
-            esp.Box.Visible = false; esp.Name.Visible = false; esp.BarBG.Visible = false; esp.BarFG.Visible = false; esp.Highlight.Enabled = false
-        end
+        for _, esp in pairs(ESPObjects) do esp.Box.Visible = false; esp.Name.Visible = false; esp.BarBG.Visible = false; esp.BarFG.Visible = false; esp.Highlight.Enabled = false end
     end
 end)
-
 
 -- ============================================================
 --  CUSTOM NOTIFICATION (WITH LOGO & SLIDING FROM RIGHT)
 -- ============================================================
 local function BunnyGlowNotification()
     pcall(function()
-        local sg = Instance.new("ScreenGui")
-        sg.Name = "BunnyNotify"
-        sg.ResetOnSpawn = false
-        local parentToUse = CoreGui
-        if not pcall(function() sg.Parent = CoreGui end) then
-            parentToUse = LocalPlayer:WaitForChild("PlayerGui")
-            sg.Parent = parentToUse
-        end
+        local sg = Instance.new("ScreenGui"); sg.Name = "BunnyNotify"; sg.ResetOnSpawn = false
+        if not pcall(function() sg.Parent = CoreGui end) then sg.Parent = LocalPlayer:WaitForChild("PlayerGui") end
         
-        local frame = Instance.new("Frame", sg)
-        frame.Size = UDim2.new(0, 270, 0, 50)
-        -- Starts off-screen to the right
-        frame.Position = UDim2.new(1, 300, 1, -80) 
-        frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-        frame.BackgroundTransparency = 0.4
-        frame.BorderSizePixel = 0
+        local frame = Instance.new("Frame", sg); frame.Size = UDim2.new(0, 270, 0, 50); frame.Position = UDim2.new(1, 300, 1, -80); frame.BackgroundColor3 = Color3RGB(15, 15, 20); frame.BackgroundTransparency = 0.4; frame.BorderSizePixel = 0
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+        local stroke = Instance.new("UIStroke", frame); stroke.Color = Color3RGB(0, 170, 255); stroke.Thickness = 1.2; stroke.Transparency = 0.1
         
-        local corner = Instance.new("UICorner", frame)
-        corner.CornerRadius = UDim.new(0, 8)
+        local logo = Instance.new("ImageLabel", frame); logo.Size = UDim2.new(0, 30, 0, 30); logo.Position = UDim2.new(0, 12, 0.5, -15); logo.BackgroundTransparency = 1; logo.Image = "rbxassetid://93880685309116"
+        local textLabel = Instance.new("TextLabel", frame); textLabel.Size = UDim2.new(1, -55, 1, 0); textLabel.Position = UDim2.new(0, 52, 0, 0); textLabel.BackgroundTransparency = 1; textLabel.Text = "Bunny Hub has fully loaded."; textLabel.TextColor3 = Color3RGB(240, 255, 255); textLabel.Font = Enum.Font.GothamBold; textLabel.TextSize = 13; textLabel.TextXAlignment = Enum.TextXAlignment.Left
         
-        local stroke = Instance.new("UIStroke", frame)
-        stroke.Color = Color3.fromRGB(0, 170, 255)
-        stroke.Thickness = 1.2 -- Thinner Blue Light
-        stroke.Transparency = 0.1
-        
-        -- Custom Image Logo
-        local logo = Instance.new("ImageLabel", frame)
-        logo.Size = UDim2.new(0, 30, 0, 30)
-        logo.Position = UDim2.new(0, 12, 0.5, -15)
-        logo.BackgroundTransparency = 1
-        logo.Image = "rbxassetid://93880685309116" -- Your New Updated Logo
-        
-        local textLabel = Instance.new("TextLabel", frame)
-        textLabel.Size = UDim2.new(1, -55, 1, 0)
-        textLabel.Position = UDim2.new(0, 52, 0, 0)
-        textLabel.BackgroundTransparency = 1
-        textLabel.Text = "Bunny Hub has fully loaded."
-        textLabel.TextColor3 = Color3.fromRGB(240, 255, 255)
-        textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextSize = 13
-        textLabel.TextXAlignment = Enum.TextXAlignment.Left
-        
-        -- Animate In (Slide from right edge to 20px off the right edge)
-        local ts = game:GetService("TweenService")
-        local tIn = ts:Create(frame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(1, -290, 1, -80)})
-        tIn:Play()
-        
-        -- Wait 4 seconds, then Animate Out and Destroy
+        TweenService:Create(frame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(1, -290, 1, -80)}):Play()
         task.delay(4, function()
-            local tOut = ts:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(1, 300, 1, -80)})
-            tOut:Play()
-            tOut.Completed:Wait()
-            sg:Destroy()
+            local tOut = TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(1, 300, 1, -80)}); tOut:Play(); tOut.Completed:Wait(); sg:Destroy()
         end)
     end)
 end
 
+-- Start UI Open & Show Notification
+ToggleUI()
 BunnyGlowNotification()
